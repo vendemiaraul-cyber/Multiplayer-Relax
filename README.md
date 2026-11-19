@@ -40,7 +40,29 @@ profile picture you drew (it's shown on your helmet visor!).
 
 > **About BeamNG:** BeamNG.drive is a paid PC/console game with no official browser version — BeamNG's own FAQ warns that apps claiming to be BeamNG on other platforms are likely malware. So Relax Hub doesn't ship a copy; the Arcade embeds legit games instead.
 
-## Deploy (GitHub → Cloudflare)
+## Deploy: Netlify (game) + Render (multiplayer server)
+
+This is the simplest setup and is what's live right now.
+
+| Part | Where | Config |
+|---|---|---|
+| Game (static files in `hub/public`) | Netlify project **relax-hub-multiplayer** | `netlify.toml` |
+| Multiplayer server (`server/server.js`) | Render web service **relax-hub-multiplayer** (Frankfurt, free) | build `npm install --prefix server`, start `node server/server.js` |
+
+`hub/public/config.js` points the game at `https://relax-hub-multiplayer.onrender.com` whenever it isn't served by a Cloudflare Worker.
+
+The server has **no required dependencies**: chat, presence, emotes and history (last 100 messages per room, in memory) work out of the box. Optional environment variables on Render:
+
+| Variable | Turns on |
+|---|---|
+| `YT_API_KEY` | YouTube search in the YouTube app |
+| `CF_ACCOUNT_ID` + `CF_API_TOKEN` | The in-game Chromium, via Cloudflare Browser Run over CDP (token needs **Browser Rendering - Edit**) |
+| `ALLOWED_ORIGIN` | Lock chat to your site, e.g. `https://relax-hub-multiplayer.netlify.app` |
+| `BROWSER_IDLE_SECONDS`, `MAX_BROWSERS` | Remote browser idle timeout (default 90) and max concurrent browsers (default 3) |
+
+Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
+
+## Alternative deploy: everything on Cloudflare Workers
 
 You need a Cloudflare account. Browser Run works on the free Workers plan (10 browser-minutes/day, 3 concurrent browsers); the paid plan gives 10 hours/month included.
 
@@ -122,6 +144,8 @@ hub/
     js/os.js            RelaxOS shell
     js/apps/*.js        YouTube, Browser, Arcade, Chat, Pixel Me
 browser/                relax-browser Worker (Browser Run + Durable Object)
+server/server.js        Node multiplayer server for Render (no dependencies)
+netlify.toml            Netlify publishes hub/public
 test/                   node:test unit tests with Workers mocks
 ```
 
