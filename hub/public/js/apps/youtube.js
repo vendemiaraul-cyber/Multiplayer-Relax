@@ -1,7 +1,7 @@
 // YouTube app: search (through the hub's /api/yt/search) + the official embed player.
 // Music keeps playing when you minimise the window or stand up from the computer.
 
-import { Net } from "../net.js";
+import { Net, api } from "../net.js";
 import { el, decodeEntities, toast } from "../util.js";
 
 const STATIONS = [
@@ -104,10 +104,10 @@ export function createYouTube() {
     }
     results.replaceChildren(el("div", { class: "yt-section", text: "Searching…" }));
     try {
-      const r = await fetch("/api/yt/search?q=" + encodeURIComponent(q));
+      const r = await fetch(api("/api/yt/search?q=" + encodeURIComponent(q)));
       const j = await r.json().catch(() => ({}));
       if (r.status === 501) {
-        showNotice("YouTube search needs an API key on the server (npx wrangler secret put YT_API_KEY). Paste a link or pick a station meanwhile.");
+        showNotice("YouTube search needs a YT_API_KEY on the server. Paste a link or pick a station meanwhile.");
         return showStations();
       }
       if (!r.ok) throw new Error(j.error || "search failed");

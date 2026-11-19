@@ -2,7 +2,7 @@
 // We stream JPEG frames of a remote tab and send your taps, scrolls and
 // typing back through the hub Worker → Service Binding → relax-browser Worker.
 
-import { Net } from "../net.js";
+import { Net, api } from "../net.js";
 import { el, sessionId, toast } from "../util.js";
 
 const QUICK = [
@@ -99,7 +99,7 @@ export function createBrowser(os) {
       return false;
     }
     if (!Net.health.browser) {
-      setStatus("The hub has no BROWSER_SVC service binding yet — deploy the relax-browser Worker.");
+      setStatus("Browser isn\u2019t set up on the server yet (Cloudflare Browser Run: add CF_ACCOUNT_ID + CF_API_TOKEN on Render, or the BROWSER_SVC binding on Workers).");
       return false;
     }
     return true;
@@ -115,7 +115,7 @@ export function createBrowser(os) {
     busy = true;
     loading.classList.toggle("hidden", action === "frame" || action === "scroll");
     try {
-      const r = await fetch("/api/browser/" + action, {
+      const r = await fetch(api("/api/browser/" + action), {
         method: "POST",
         headers: { "content-type": "application/json", "x-relax-session": SID },
         body: JSON.stringify({ ...params, ...viewport() }),
@@ -250,7 +250,7 @@ export function createBrowser(os) {
       clearInterval(liveTimer);
       clearTimeout(followUp);
       if (started && Net.health?.browser) {
-        fetch("/api/browser/close", { method: "POST", headers: { "content-type": "application/json", "x-relax-session": SID }, body: "{}" }).catch(() => {});
+        fetch(api("/api/browser/close"), { method: "POST", headers: { "content-type": "application/json", "x-relax-session": SID }, body: "{}" }).catch(() => {});
       }
     },
   };

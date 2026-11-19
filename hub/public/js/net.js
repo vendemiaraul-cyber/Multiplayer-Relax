@@ -3,6 +3,10 @@
 
 const listeners = new Map();
 
+/** Where the multiplayer server lives ("" = same origin, e.g. Cloudflare Workers). Set in config.js. */
+export const SERVER = String((typeof window !== "undefined" && window.RELAX_SERVER) || "").replace(/\/+$/, "");
+export const api = (path) => SERVER + path;
+
 export const Net = {
   status: "connecting", // connecting | online | offline | reconnecting
   health: null, // { chat, youtube, browser } from /api/health
@@ -41,7 +45,13 @@ export const Net = {
       const params = new URLSearchParams(location.search);
       if (params.get("room")) this.room = params.get("room").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 32) || "lobby";
     } catch {}
+    this.setStatus(SERVER ? "waking" : "connecting");
     this.health = await checkHealth();
+    // A sleeping free server (Render) can take ~a minute to wake: keep trying.
+    for (let i = 0; SERVER && !this.health && i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      this.health = await checkHealth();
+    }
     this.emit("health", this.health);
     if (!this.health || !this.health.chat) {
       this.setStatus("offline");
@@ -55,10 +65,10 @@ export const Net = {
   },
 
   connect() {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const base = SERVER ? SERVER.replace(/^http/, "ws") : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
     let ws;
     try {
-      ws = new WebSocket(`${proto}//${location.host}/api/chat?room=${encodeURIComponent(this.room)}`);
+      ws = new WebSocket(`${base}/api/chat?room=${encodeURIComponent(this.room)}`);
     } catch {
       this.setStatus("offline");
       return;
@@ -192,8 +202,8 @@ export const Net = {
 async function checkHealth() {
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 3500);
-    const r = await fetch("/api/health", { cache: "no-store", signal: ctrl.signal });
+    const t = setTimeout(() => ctrl.abort(), SERVER ? 75000 : 3500);
+    const r = await fetch(api("/api/health"), { cache: "no-store", signal: ctrl.signal });
     clearTimeout(t);
     if (!r.ok) return null;
     const j = await r.json();

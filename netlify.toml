@@ -1,0 +1,10 @@
+# Netlify hosts the static game; the multiplayer server runs on Render (server/).
+[build]
+  publish = "hub/public"
+  command = "echo 'static site - nothing to build'"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

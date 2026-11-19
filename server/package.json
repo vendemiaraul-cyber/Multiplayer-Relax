@@ -1,0 +1,15 @@
+{
+  "name": "relax-hub-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Multiplayer server for Relax Hub (chat, presence, YouTube search, optional Cloudflare Browser Run).",
+  "type": "module",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "optionalDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

@@ -58,7 +58,7 @@ const systemApp = () => {
       el("ul", { class: "svc" },
         row("Multiplayer chat (Durable Object)", Net.status === "online", Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
-        row("Chromium (Cloudflare Browser Run via Service Binding)", !!h?.browser, h?.browser ? "relax-browser bound" : "deploy relax-browser + hub"),
+        row("Chromium (Cloudflare Browser Run)", !!h?.browser, h?.browser ? "connected" : "add Cloudflare credentials on the server"),
       ),
       el("p", { class: "muted", text: `You are ${profile.name}${Net.you ? " · id " + Net.you : ""} · room “${Net.room}”` }),
       el("p", { class: "muted", text: "Tip: add ?room=yourname to the URL for a private ship." }),
@@ -251,7 +251,7 @@ function renderNet() {
   const s = Net.status;
   const n = Net.users.size + 1;
   netPill.className = "pill net " + s;
-  netPill.textContent = s === "online" ? `● ${n} aboard` : s === "offline" ? "○ offline preview" : "◌ connecting…";
+  netPill.textContent = s === "online" ? `● ${n} aboard` : s === "offline" ? "○ offline preview" : s === "waking" ? "◌ waking server…" : "◌ connecting…";
 }
 Net.on("status", renderNet);
 Net.on("users", renderNet);
