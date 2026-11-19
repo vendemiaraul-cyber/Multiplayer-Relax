@@ -1,17 +1,20 @@
 {
-  "name": "relax-hub",
+  "name": "multiplayer-relax",
   "private": true,
   "version": "1.0.0",
-  "description": "Tiny retro spaceship hangout: RelaxOS computer, YouTube, Chromium via Cloudflare Browser Run, soft-body driving, drinks, moon trips and multiplayer chat.",
-  "workspaces": ["hub", "browser"],
+  "description": "Tiny retro 3D spaceship hangout: RelaxOS computer, YouTube, Chromium via Cloudflare Browser Run, Arcade, drinks, moon trips and multiplayer chat.",
+  "workspaces": [
+    "browser"
+  ],
   "scripts": {
-    "dev": "wrangler dev -c hub/wrangler.jsonc -c browser/wrangler.jsonc --remote",
-    "deploy:browser": "npm run deploy -w browser",
-    "deploy:hub": "npm run deploy -w hub",
-    "deploy": "npm run deploy:browser && npm run deploy:hub",
+    "deploy": "wrangler deploy -c browser/wrangler.jsonc && wrangler deploy",
+    "deploy:browser": "wrangler deploy -c browser/wrangler.jsonc",
+    "deploy:hub": "wrangler deploy",
+    "dev": "wrangler dev -c wrangler.jsonc -c browser/wrangler.jsonc --remote",
     "test": "node --experimental-sqlite --import ./test/register-mocks.mjs --test test/*.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
-  }
+  },
+  "type": "module"
 }

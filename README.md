@@ -15,7 +15,7 @@ profile picture you drew (it's shown on your helmet visor!).
 └──────────────┬────────────────────────┘
                │ HTTPS + WebSocket
 ┌──────────────▼────────────────────────┐      Service Binding (RPC)      ┌──────────────────────────────┐
-│ relax-hub  Worker                     │ ──────────────────────────────▶ │ relax-browser  Worker        │
+│ multiplayer-relax  Worker (hub)       │ ──────────────────────────────▶ │ relax-browser  Worker        │
 │  • static files (public/)             │   env.BROWSER_SVC.act(...)      │  • Cloudflare Browser Run    │
 │  • /api/chat → ChatRoom Durable Object│                                 │    (headless Chromium)       │
 │  • /api/yt/search → YouTube Data API  │                                 │  • BrowserSession Durable    │
@@ -44,54 +44,60 @@ profile picture you drew (it's shown on your helmet visor!).
 
 You need a Cloudflare account. Browser Run works on the free Workers plan (10 browser-minutes/day, 3 concurrent browsers); the paid plan gives 10 hours/month included.
 
-### 1. Put it on GitHub
+There are **two Workers**, both built from this one repo:
 
-```bash
-git init && git add . && git commit -m "Relax Hub"
-git branch -M main
-git remote add origin https://github.com/vendemiaraul-cyber/Multiplayer-Relax.git
-git push -u origin main
-```
+| Worker | Config | What it is |
+|---|---|---|
+| `relax-browser` | `browser/wrangler.jsonc` | Chromium on Cloudflare Browser Run (only reachable through the Service Binding) |
+| `multiplayer-relax` | `wrangler.jsonc` (repo root) | The game, chat, YouTube search; binds `BROWSER_SVC` → `relax-browser` |
 
-### 2a. Deploy from your computer
+`npm run deploy` deploys `relax-browser` **first**, then `multiplayer-relax`, so the Service Binding always resolves.
+
+### Option A — Cloudflare dashboard (Workers Builds)
+
+1. Workers & Pages → **multiplayer-relax** → Settings → **Build**.
+2. Set:
+   - **Branch:** `main` (or `relax-hub` until it's merged)
+   - **Root directory:** `/` (leave empty)
+   - **Build command:** leave empty
+   - **Deploy command:** `npm run deploy`
+3. Save, then Deployments → **Retry build**.
+
+If the build log says it isn't allowed to deploy `relax-browser`, create that Worker once yourself: Create → Import a repository → this repo → Worker name **`relax-browser`**, root directory **`browser`**. Then retry the `multiplayer-relax` build.
+
+### Option B — from your computer
 
 ```bash
 npm install
 npx wrangler login
-npm run deploy          # deploys relax-browser first, then relax-hub
+npm run deploy
 ```
 
-### 2b. …or let GitHub Actions deploy on every push
+### Option C — GitHub Actions on every push to `main`
 
-`.github/workflows/deploy.yml` is included. In your repo → Settings → Secrets → Actions add:
+`.github/workflows/deploy.yml` is included. In the repo → Settings → Secrets and variables → Actions, add `CLOUDFLARE_API_TOKEN` (use the **“Edit Cloudflare Workers”** token template) and `CLOUDFLARE_ACCOUNT_ID`.
 
-- `CLOUDFLARE_API_TOKEN` — create one from the **“Edit Cloudflare Workers”** token template
-- `CLOUDFLARE_ACCOUNT_ID`
+### Service Binding (already in `wrangler.jsonc`)
 
-### 2c. …or Cloudflare Workers Builds (dashboard)
+| Variable name | Service | Entrypoint |
+|---|---|---|
+| `BROWSER_SVC` | `relax-browser` | default |
 
-Workers & Pages → Create → Import a repository → pick the repo **twice**:
-first with root directory `browser` (worker name `relax-browser`), then with root directory `hub` (worker name `relax-hub`). The hub's Service Binding needs `relax-browser` to exist first.
+You don't need to add it in the dashboard — each deploy sets it from `wrangler.jsonc`. If you do add it by hand, use exactly these values.
 
-### 3. Optional: YouTube search
+### Optional: YouTube search
 
-Get a free YouTube Data API v3 key (Google Cloud console) and run:
+Get a free YouTube Data API v3 key and run `npx wrangler secret put YT_API_KEY` in the repo root. Without a key, pasted links and the radio stations still work.
 
-```bash
-cd hub && npx wrangler secret put YT_API_KEY
-```
+### Open it
 
-Without a key, pasted links and the radio stations still work.
-
-### 4. Open it
-
-`https://relax-hub.<your-subdomain>.workers.dev` — open it on two devices and say hi to yourself.
+`https://multiplayer-relax.<your-subdomain>.workers.dev` — open it on two devices and say hi to yourself.
 
 ## Local development
 
 ```bash
 npm install
-npm run dev     # runs both Workers together (Browser Run uses --remote)
+npm run dev     # runs both Workers together (Browser Run needs --remote)
 npm test        # chat room + URL-guard unit tests (no Cloudflare needed)
 ```
 
@@ -107,7 +113,8 @@ npm test        # chat room + URL-guard unit tests (no Cloudflare needed)
 ## Project layout
 
 ```
-hub/                    relax-hub Worker
+wrangler.jsonc          multiplayer-relax (hub) Worker config
+hub/
   src/index.js          router, YouTube proxy, browser proxy, ChatRoom DO
   public/               the game (static assets)
     js/engine3d.js      WebGL engine
