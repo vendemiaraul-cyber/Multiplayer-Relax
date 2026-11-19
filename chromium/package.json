@@ -1,0 +1,10 @@
+{
+  "name": "relax-hub-chromium",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Embedded Chromium for Relax Hub: streams a real headless Chromium over WebSocket (no npm dependencies).",
+  "type": "module",
+  "main": "server.js",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server.js" }
+}

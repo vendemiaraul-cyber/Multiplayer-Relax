@@ -7,6 +7,7 @@ import { DRINKS, cupCanvas } from "./drinks.js";
 import { Chat, ChatView, createChatApp } from "./apps/chat.js";
 import { createYouTube, NowPlaying } from "./apps/youtube.js";
 import { createBrowser } from "./apps/browser.js";
+import { createLiveBrowser } from "./apps/browser-live.js";
 import { createArcade } from "./apps/arcade.js";
 import { createPixelMe } from "./apps/pixelme.js";
 import { $, el, store, randomName, randomPfp, toast, pfpURL } from "./util.js";
@@ -58,7 +59,7 @@ const systemApp = () => {
       el("ul", { class: "svc" },
         row("Multiplayer chat (Durable Object)", Net.status === "online", Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
-        row("Chromium (Cloudflare Browser Run)", !!h?.browser, h?.browser ? "connected" : "add Cloudflare credentials on the server"),
+        row("Chromium", !!(window.RELAX_BROWSER || h?.browser), window.RELAX_BROWSER ? "embedded · " + window.RELAX_BROWSER.replace(/^https?:\/\//, "") : h?.browser ? "Cloudflare Browser Run" : "not configured"),
       ),
       el("p", { class: "muted", text: `You are ${profile.name}${Net.you ? " · id " + Net.you : ""} · room “${Net.room}”` }),
       el("p", { class: "muted", text: "Tip: add ?room=yourname to the URL for a private ship." }),
@@ -70,7 +71,7 @@ const systemApp = () => {
 
 os = new RelaxOS($("#os"), [
   { id: "tube", title: "YouTube", sub: "search + player", icon: "tube", create: () => createYouTube() },
-  { id: "browser", title: "Browser", sub: "Chromium · Browser Run", icon: "browser", create: (o) => createBrowser(o) },
+  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", create: (o) => (window.RELAX_BROWSER ? createLiveBrowser(o) : createBrowser(o)) },
   { id: "arcade", title: "Arcade", sub: "SuperTuxKart · Slow Roads", icon: "car", create: () => createArcade() },
   { id: "chat", title: "Chat", sub: "everyone aboard", icon: "chat", create: () => createChatApp() },
   { id: "pixelme", title: "Pixel Me", sub: "make your pfp", icon: "pixel", create: (o) => createPixelMe(o, { getProfile, saveProfile }) },

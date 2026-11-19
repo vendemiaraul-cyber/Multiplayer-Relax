@@ -60,6 +60,20 @@ The server has **no required dependencies**: chat, presence, emotes and history 
 | `ALLOWED_ORIGIN` | Lock chat to your site, e.g. `https://relax-hub-multiplayer.netlify.app` |
 | `BROWSER_IDLE_SECONDS`, `MAX_BROWSERS` | Remote browser idle timeout (default 90) and max concurrent browsers (default 3) |
 
+### Embedded Chromium (`chromium/`)
+
+The **Chromium** app on the computer is a real headless Chromium running on the server, streamed live into the window (JPEG screencast over a WebSocket) with your clicks, touch-drags, scrolling and typing sent back through the Chrome DevTools Protocol. No API keys and no npm packages — just `chromium/Dockerfile`:
+
+| | |
+|---|---|
+| Render service | **relax-chromium** (Docker, `chromium/Dockerfile`, context = repo root) |
+| Also runs on | Hugging Face Spaces (Docker, port 7860), Fly.io, any Docker host |
+| Env vars | `MAX_SESSIONS` (default 2), `SESSION_IDLE_SECONDS` (600), `JPEG_QUALITY` (55), `ALLOWED_ORIGIN` |
+
+Each player gets their own incognito browser context; private/local addresses, `file://` and downloads are blocked, dialogs are auto-dismissed, and Chromium shuts down 60 s after the last player leaves.
+
+> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. For a snappy browser use Render **Starter**, or run the same Dockerfile as a free **Hugging Face Space** (2 vCPU / 16 GB).
+
 Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
 
 ## Alternative deploy: everything on Cloudflare Workers
@@ -145,6 +159,7 @@ hub/
     js/apps/*.js        YouTube, Browser, Arcade, Chat, Pixel Me
 browser/                relax-browser Worker (Browser Run + Durable Object)
 server/server.js        Node multiplayer server for Render (no dependencies)
+chromium/               embedded Chromium streaming server + Dockerfile
 netlify.toml            Netlify publishes hub/public
 test/                   node:test unit tests with Workers mocks
 ```
