@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Main Worker: game files + multiplayer chat + YouTube search + browser proxy
+  "name": "relax-hub",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-12",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "CHAT", "class_name": "ChatRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ChatRoom"] }],
+  // Service Binding to the relax-browser Worker (deploy that one first)
+  "services": [{ "binding": "BROWSER_SVC", "service": "relax-browser" }],
+  "observability": { "enabled": true }
+  // Optional secret for YouTube search:  npx wrangler secret put YT_API_KEY
+}

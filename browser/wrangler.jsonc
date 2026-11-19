@@ -1,0 +1,21 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Remote Chromium for the in-game browser, powered by Cloudflare Browser Run.
+  // Only reachable through the hub's Service Binding.
+  "name": "relax-browser",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "browser": { "binding": "BROWSER" },
+  "durable_objects": {
+    "bindings": [{ "name": "BROWSER_SESSION", "class_name": "BrowserSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BrowserSession"] }],
+  "vars": {
+    // Close a player's remote browser after this many idle seconds (saves browser minutes)
+    "BROWSER_IDLE_SECONDS": "90"
+  },
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0b1e">
+  <meta name="description" content="Relax Hub — a tiny retro spaceship hangout with a computer, drinks, moon trips and multiplayer chat.">
+  <title>Relax Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">RELAX<span>HUB</span></div>
+      <div class="pills">
+        <button id="nowPlaying" class="pill np" type="button" title="Stop music" hidden>♪ <span class="np-title"></span> ■</button>
+        <div id="effectPill" class="pill fx" hidden></div>
+        <div id="netStatus" class="pill net">◌ connecting…</div>
+        <button id="meChip" class="pill me" type="button" title="Edit your profile"></button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <div class="screen-wrap">
+        <canvas id="game" aria-hidden="true"></canvas>
+        <canvas id="overlay" aria-label="3D spaceship. Tap the floor to walk, tap objects to use them."></canvas>
+      </div>
+    </main>
+
+    <nav id="hud" class="hud" aria-label="Actions"></nav>
+    <p class="hint">tap the floor or WASD / arrows to walk · E to use · space to jump on the moon</p>
+
+    <aside id="chatDrawer" class="drawer hidden" aria-label="Chat">
+      <header><h2>💬 Ship chat</h2><button class="close" type="button" aria-label="Close chat">×</button></header>
+      <div class="drawer-body"></div>
+    </aside>
+
+    <div id="drinkMenu" class="modal hidden" role="dialog" aria-label="Choose a drink">
+      <div class="sheet">
+        <header><h2>DRINK-O-TRON</h2><button class="close" type="button" aria-label="Close">×</button></header>
+        <p class="muted">Pick a drink — each one does something a little silly to your spacer.</p>
+        <div class="drink-grid"></div>
+      </div>
+    </div>
+
+    <div id="os"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
