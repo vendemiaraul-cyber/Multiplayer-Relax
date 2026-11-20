@@ -8,4 +8,8 @@
   // Live embedded Chromium (chromium/ Docker server). Set "" to use the
   // Cloudflare Browser Run Service Binding (BROWSER_SVC) instead.
   if (window.RELAX_BROWSER === undefined) window.RELAX_BROWSER = "https://relax-chromium.onrender.com";
+  // Maps → ArcGIS SceneView works without a key (satellite + world elevation).
+  // Optional: an ArcGIS Location Platform API key (restrict it to your domain)
+  // for keyed services such as the geocoder.
+  if (window.RELAX_ARCGIS_KEY === undefined) window.RELAX_ARCGIS_KEY = "";
 })();

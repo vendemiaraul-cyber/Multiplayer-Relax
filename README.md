@@ -11,7 +11,7 @@ profile picture you drew (it's shown on your helmet visor!).
 ┌──────────── Browser ────────────┐
 │ 3D ship (WebGL, no libraries)   │
 │ RelaxOS: YouTube · Chromium ·   │
-│ Arcade · Chat · Pixel Me        │
+│ Maps · Arcade · Chat · Pixel Me │
 └───────────────┬─────────────────┘
                 │ HTTPS + WebSocket (same origin)
 ┌───────────────▼─────────────────┐   Service Binding    ┌──────────────────────────────┐
@@ -32,7 +32,8 @@ profile picture you drew (it's shown on your helmet visor!).
 | **Drinks** | 13 drinks, each with a silly effect: speed, ZOOM jitters, hearts, cosmic burps, slow-motion stars, sleepy Zzz, sparkles, hiccup hops, rainbow trail, zen aura, sour face, bubbles, +100 HP. Other players see your drink and its effect. |
 | **Eject to space** | Hold the button 1.5 s → walk to the airlock, doors open, you get sucked out, jetpack to the Moon, walk/jump/plant a flag, fly back. |
 | **RelaxOS** | Boots from a pretend `RELAXOS.ISO` (only the necessary code). Windows, taskbar, start menu. Music keeps playing when you minimise YouTube or stand up. |
-| **YouTube** | Search via the hub (`/api/yt/search`, cached 1 h) + the official `youtube-nocookie.com` embed. Paste any link, or use the built-in lofi / synthwave stations. |
+| **YouTube** | The official embed player (needs no server or key) + search via the multiplayer Worker (`/api/yt/search`, cached 1 h). Paste any link, or use the built-in Lofi Girl stations. The official IFrame Player API attaches to the embed, so real errors (embedding disabled, missing referrer “Error 153”, …) are shown instead of an endless spinner, with **Reload**, **⇄ switch between youtube.com and youtube-nocookie.com** and **Open on YouTube**. |
+| **Maps** | Opens with a choice of 3D engine: **ArcGIS SceneView** (Esri's ArcGIS Maps SDK for JavaScript 5.1 — satellite imagery on world elevation, tilt into the terrain; no key needed) or **Globe.gl** (light three.js globe with blue-marble/night textures and a tiny Relax Hub ship in orbit). Place search (ArcGIS World Geocoder, falling back to OpenStreetMap Nominatim), “lat, lng” input, and quick trips to Everest, the Grand Canyon, the Matterhorn and more. Each engine runs in its own page (`hub/public/maps/`), so it also works full screen. |
 | **Browser** | A *real* Chromium running on **Cloudflare Browser Run**. The `relax-browser` Worker keeps one tab per player in a Durable Object and streams JPEG frames; your taps, scrolls and typing are replayed with Puppeteer. Includes a “Live View” pop-out (Cloudflare's hosted interactive view of the same tab). Private/local addresses are blocked. |
 | **Arcade** | High-quality games embedded from their official hosts: **SuperTuxKart** (the open-source GPL kart racer from PC/Mac/Linux/Android/Switch, WebAssembly port by ading2210 at `supertuxkart.pages.dev`) and **Slow Roads** (zen endless driving by anslo, `slowroads.io`). Nothing is copied into this repo. |
 | **Multiplayer chat** | One `ChatRoom` Durable Object per room (WebSocket Hibernation, SQLite history of the last 100 messages). Positions, drinks, scenes, emotes and profile updates are synced. Add `?room=anything` to the URL for a private ship. |
@@ -114,6 +115,8 @@ npm test        # chat room, game Worker routing, Node server and Chromium tests
 |---|---|
 | `browser/wrangler.jsonc` → `BROWSER_IDLE_SECONDS` | How long a player's remote Chromium stays open after the last action (default 90 s — keeps you inside the free daily minutes). |
 | `hub/public/js/apps/arcade.js` → `GAMES` | Add/remove Arcade games (any site that allows embedding). |
+| `hub/public/config.js` → `RELAX_ARCGIS_KEY` | Optional ArcGIS Location Platform API key (restrict it to your domain) for keyed ArcGIS services. The default Maps view works without one. |
+| `hub/public/js/apps/maps.js` → `PLACES` | The quick-trip places in Maps. |
 | `hub/public/js/drinks.js` | Drink menu + effects. |
 | `hub/public/js/world3d.js` → `buildShip` | The ship's furniture and layout. |
 
@@ -128,7 +131,8 @@ hub/
     js/engine3d.js      WebGL engine
     js/world3d.js       ship / flight / moon / spacers
     js/os.js            RelaxOS shell
-    js/apps/*.js        YouTube, Browser, Arcade, Chat, Pixel Me
+    js/apps/*.js        YouTube, Browser, Maps, Arcade, Chat, Pixel Me
+    maps/               ArcGIS SceneView and Globe.gl pages used by Maps
 browser/                relax-browser Worker (Browser Run + Durable Object)
 server/server.js        Node multiplayer server for Render (no dependencies)
 chromium/               embedded Chromium streaming server + Dockerfile
@@ -140,5 +144,6 @@ test/                   node:test unit tests with Workers mocks
 
 - SuperTuxKart © the SuperTuxKart team, GPL-3.0 — web port by [ading2210](https://github.com/ading2210/stk-code)
 - Slow Roads © anslo — [slowroads.io](https://slowroads.io)
+- Maps: [ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/) by Esri (imagery & elevation © Esri and its data providers, attribution shown in the view); [globe.gl](https://github.com/vasturiano/globe.gl) by Vasco Asturiano (MIT) with NASA Blue Marble textures from three-globe; geocoding fallback © OpenStreetMap contributors (Nominatim)
 - Fonts: Press Start 2P & VT323 (Google Fonts, OFL)
 - Everything else in this repo was written for Relax Hub.

@@ -35,6 +35,12 @@ export const ICONS = {
     ".66066666666066.", "..660666666066..", "..666000000666..", "...6666666666...",
     ".....666666.....", "................", "................", "................",
   ],
+  map: [
+    "...........33...", ".....bbbbb3773..", "...bb88bbb3773..", "..b8888bbbb33b..",
+    "..b888bbb88b3b..", ".bb88bbbb888bbb.", ".bbb8bbbbbb8bbb.", ".bbbbbb8bbbbbbb.",
+    ".bbbbb888bbbbbb.", ".bbbbb8888bbbbb.", "..bbbbb88bbbbb..", "..bbbbbb8bbbbb..",
+    "...bbbbbbbbbb...", ".....bbbbbb.....", "................", "................",
+  ],
   system: [
     "................", ".ffffffffffffff.", ".f000000000000f.", ".f088800000000f.",
     ".f000000000000f.", ".f088888000000f.", ".f000000000000f.", ".f088000000000f.",
@@ -75,6 +81,7 @@ export class RelaxOS {
     });
     this.taskbar = el("div", { class: "taskbar" }, start, this.tasks, this.clock);
     const screen = el("div", { class: "screen" }, this.bootEl, this.desktop, this.taskbar, this.menu, el("div", { class: "scanlines" }));
+    this.screen = screen;
     screen.addEventListener("click", () => this.menu.classList.add("hidden"));
     const standup = el("button", { class: "standup btn", type: "button", text: "⏏ Stand up" });
     standup.addEventListener("click", () => this.close());
@@ -127,7 +134,7 @@ export class RelaxOS {
       "RAM: 640K ............................... OK",
       "Mounting RELAXOS.ISO (1.44 MB) .......... OK",
       "Loading kernel  /boot/relax.sys ......... OK",
-      "Starting tube, chromium, arcade, chat, pixelme",
+      "Starting tube, chromium, maps, arcade, chat, pixelme",
       "Linking to Cloudflare edge ............... OK",
       "",
       `Welcome aboard, ${name}!`,
@@ -188,7 +195,14 @@ export class RelaxOS {
       if (!on && rid === this.active) r.inst.onHide?.();
     }
     this.active = id;
+    this.markMedia();
     this.running.get(id)?.inst.onShow?.();
+  }
+
+  /** No CRT scanlines over video / map / browser frames (they can stall iframe video). */
+  markMedia() {
+    const app = this.apps.find((a) => a.id === this.active);
+    this.screen.classList.toggle("media", Boolean(app && app.media));
   }
 
   minimize(id) {
@@ -198,6 +212,7 @@ export class RelaxOS {
     r.task.classList.remove("on");
     r.inst.onHide?.();
     if (this.active === id) this.active = null;
+    this.markMedia();
   }
 
   kill(id) {
@@ -208,5 +223,6 @@ export class RelaxOS {
     r.task.remove();
     this.running.delete(id);
     if (this.active === id) this.active = null;
+    this.markMedia();
   }
 }

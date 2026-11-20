@@ -9,6 +9,7 @@ import { createYouTube, NowPlaying } from "./apps/youtube.js";
 import { createBrowser } from "./apps/browser.js";
 import { createLiveBrowser } from "./apps/browser-live.js";
 import { createArcade } from "./apps/arcade.js";
+import { createMaps } from "./apps/maps.js";
 import { createPixelMe } from "./apps/pixelme.js";
 import { $, el, store, randomName, randomPfp, toast, pfpURL } from "./util.js";
 
@@ -74,9 +75,10 @@ const systemApp = () => {
 };
 
 os = new RelaxOS($("#os"), [
-  { id: "tube", title: "YouTube", sub: "search + player", icon: "tube", create: () => createYouTube() },
-  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", create: (o) => (window.RELAX_BROWSER ? createLiveBrowser(o) : createBrowser(o)) },
-  { id: "arcade", title: "Arcade", sub: "SuperTuxKart · Slow Roads", icon: "car", create: () => createArcade() },
+  { id: "tube", title: "YouTube", sub: "search + player", icon: "tube", media: true, create: () => createYouTube() },
+  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", media: true, create: (o) => (window.RELAX_BROWSER ? createLiveBrowser(o) : createBrowser(o)) },
+  { id: "maps", title: "Maps", sub: "ArcGIS SceneView · Globe.gl", icon: "map", media: true, create: () => createMaps() },
+  { id: "arcade", title: "Arcade", sub: "SuperTuxKart · Slow Roads", icon: "car", media: true, create: () => createArcade() },
   { id: "chat", title: "Chat", sub: "everyone aboard", icon: "chat", create: () => createChatApp() },
   { id: "pixelme", title: "Pixel Me", sub: "make your pfp", icon: "pixel", create: (o) => createPixelMe(o, { getProfile, saveProfile }) },
   { id: "system", title: "System", sub: "status", icon: "system", create: () => systemApp() },

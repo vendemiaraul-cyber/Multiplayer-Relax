@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Relax Maps · Globe.gl</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #02010a; color: #f4efe1; font: 15px/1.3 system-ui, sans-serif; }
+    #globe { position: absolute; inset: 0; }
+    .ctl { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+    .ctl button { background: #1d2040e6; color: #f4efe1; border: 2px solid #3a3f6e; border-radius: 8px; padding: 5px 9px; font: inherit; cursor: pointer; }
+    .ctl button.on { background: #ff6fa8; border-color: #ffb3cf; color: #0d0b1e; }
+    .ship { font-size: 22px; filter: drop-shadow(0 0 6px #7ef9ff); pointer-events: none; transform: translate(-50%, -50%); white-space: nowrap; }
+    .ship small { font: 10px system-ui; color: #7ef9ff; display: block; text-align: center; }
+    #msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+</head>
+<body>
+  <div id="globe"></div>
+  <div class="ctl">
+    <button id="spin" class="on" type="button" title="Auto-rotate">⟳ Spin</button>
+    <button id="night" type="button" title="Night lights">🌃 Night</button>
+    <button id="home" type="button" title="Whole Earth">🌍 Earth</button>
+  </div>
+  <script>
+  (() => {
+    const IMG = "https://cdn.jsdelivr.net/npm/three-globe/example/img/";
+    const parentPost = (msg) => { try { if (parent !== window) parent.postMessage({ relaxMaps: 1, ...msg }, location.origin); } catch {} };
+    const fail = (msg) => {
+      parentPost({ t: "error", msg });
+      if (parent !== window) return; // the Maps app shows the error with Retry / switch buttons
+      document.getElementById("msg")?.remove();
+      document.body.append(Object.assign(document.createElement("div"), { id: "msg", textContent: "⚠ " + msg }));
+    };
+    if (typeof Globe === "undefined") return fail("globe.gl didn't load (blocked or offline CDN).");
+    const c = document.createElement("canvas");
+    if (!(c.getContext("webgl2") || c.getContext("webgl"))) return fail("This device can't run WebGL, which the globe needs.");
+
+    const PLACES = [
+      { name: "Mount Everest", lat: 27.9881, lng: 86.925 },
+      { name: "Grand Canyon", lat: 36.0544, lng: -112.1401 },
+      { name: "Matterhorn", lat: 45.9763, lng: 7.6586 },
+      { name: "Mount Fuji", lat: 35.3606, lng: 138.7274 },
+      { name: "Kennedy Space Center", lat: 28.5729, lng: -80.649 },
+      { name: "Yosemite Valley", lat: 37.7456, lng: -119.5936 },
+      { name: "Rio de Janeiro", lat: -22.9519, lng: -43.2105 },
+      { name: "Sydney Harbour", lat: -33.8568, lng: 151.2153 },
+    ];
+    const elRoot = document.getElementById("globe");
+    let g;
+    try {
+      try { g = new Globe(elRoot, { animateIn: true }); } catch { g = Globe()(elRoot); }
+      g.globeImageUrl(IMG + "earth-blue-marble.jpg")
+        .bumpImageUrl(IMG + "earth-topology.png")
+        .backgroundImageUrl(IMG + "night-sky.png")
+        .atmosphereColor("#7ef9ff")
+        .atmosphereAltitude(0.18)
+        .labelsData(PLACES)
+        .labelLat((d) => d.lat).labelLng((d) => d.lng).labelText((d) => d.name)
+        .labelSize(0.9).labelDotRadius(0.45).labelColor(() => "#ffd166").labelResolution(2)
+        .onLabelClick((d) => fly(d))
+        .ringsData([])
+        .ringColor(() => (t) => `rgba(255,111,168,${1 - t})`)
+        .ringMaxRadius(4).ringPropagationSpeed(3).ringRepeatPeriod(700)
+        .onGlobeClick(({ lat, lng }) => {
+          g.ringsData([{ lat, lng }]);
+          parentPost({ t: "pick", lat, lng });
+        });
+    } catch (e) {
+      return fail("The globe couldn't start: " + (e && e.message ? e.message : e));
+    }
+
+    // the Relax Hub ship, orbiting
+    const ship = { lat: 0, lng: 0, alt: 0.55 };
+    g.htmlElementsData([ship])
+      .htmlLat((d) => d.lat).htmlLng((d) => d.lng).htmlAltitude((d) => d.alt)
+      .htmlElement(() => {
+        const d = document.createElement("div");
+        d.className = "ship";
+        d.innerHTML = "🛸<small>RELAX HUB</small>";
+        return d;
+      });
+    if (typeof g.htmlTransitionDuration === "function") g.htmlTransitionDuration(0);
+    const t0 = performance.now();
+    setInterval(() => {
+      const t = (performance.now() - t0) / 1000;
+      ship.lng = ((t * 6) % 360) - 180;
+      ship.lat = Math.sin(t * 0.21) * 28;
+      g.htmlElementsData([ship]);
+    }, 120);
+
+    const controls = g.controls();
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.45;
+    const spinBtn = document.getElementById("spin");
+    const setSpin = (on) => { controls.autoRotate = on; spinBtn.classList.toggle("on", on); };
+    spinBtn.onclick = () => setSpin(!controls.autoRotate);
+    let night = false;
+    document.getElementById("night").onclick = (e) => {
+      night = !night;
+      e.currentTarget.classList.toggle("on", night);
+      g.globeImageUrl(IMG + (night ? "earth-night.jpg" : "earth-blue-marble.jpg"));
+    };
+    document.getElementById("home").onclick = () => { g.pointOfView({ altitude: 2.5 }, 1200); setSpin(true); };
+
+    function fly(p) {
+      setSpin(false);
+      g.ringsData([{ lat: p.lat, lng: p.lng }]);
+      g.pointOfView({ lat: p.lat, lng: p.lng, altitude: 0.45 }, 1600);
+      parentPost({ t: "pick", lat: p.lat, lng: p.lng, name: p.name });
+    }
+
+    const size = () => g.width(innerWidth).height(innerHeight);
+    addEventListener("resize", size);
+    size();
+
+    // start where the URL hash says (from the Maps app's "full screen" link)
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (h.has("lat") && h.has("lng")) {
+      const lat = Number(h.get("lat")), lng = Number(h.get("lng"));
+      if (Number.isFinite(lat) && Number.isFinite(lng)) setTimeout(() => fly({ lat, lng }), 300);
+    } else {
+      g.pointOfView({ lat: 20, lng: 10, altitude: 2.5 }, 0);
+    }
+
+    addEventListener("message", (e) => {
+      if (e.origin !== location.origin) return;
+      const m = e.data;
+      if (m && m.relaxMaps === 1 && m.t === "fly" && Number.isFinite(m.lat) && Number.isFinite(m.lng)) fly(m);
+    });
+    parentPost({ t: "ready", engine: "globe" });
+  })();
+  </script>
+</body>
+</html>
