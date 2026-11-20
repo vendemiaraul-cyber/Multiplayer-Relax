@@ -1,4 +1,5 @@
-# Embedded Chromium for Relax Hub (Render, Hugging Face Spaces, Fly, any Docker host).
+# Relax Hub Chromium in a container (Render, Fly, Koyeb, any Docker host).
+# Uses the system Chromium; puppeteer doesn't download its own.
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
@@ -7,15 +8,19 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \
-    CHROMIUM_PATH=/usr/bin/chromium
+    CHROMIUM_PATH=/usr/bin/chromium \
+    CHROMIUM_NO_SANDBOX=1 \
+    PUPPETEER_SKIP_DOWNLOAD=1 \
+    HOST=0.0.0.0 \
+    PORT=7860
 
 WORKDIR /app
-COPY server/package.json server/package.json
-COPY server/ws.js server/ws.js
 COPY chromium/package.json chromium/package.json
-COPY chromium/server.js chromium/server.js
+RUN cd chromium && npm install --omit=dev --no-audit --no-fund
+COPY chromium/core.js chromium/server.js chromium/
 
-# Render sets $PORT; Hugging Face Spaces uses 7860 (the default).
+# Set ACCESS_KEY (and ALLOWED_ORIGIN=https://your-game) in the host's settings;
+# without ACCESS_KEY a random key is printed in the logs at start.
 EXPOSE 7860
 USER node
 CMD ["node", "chromium/server.js"]

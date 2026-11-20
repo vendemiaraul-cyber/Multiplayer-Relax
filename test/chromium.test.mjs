@@ -1,67 +1,169 @@
-// End-to-end: start the Chromium streaming server, drive a real local Chrome through it.
-import { test, after } from "node:test";
+// BrowserHub (chromium/core.js) against a real Chrome through Puppeteer, with
+// local test pages served by python3 -m http.server. Skipped when Chrome or
+// the local dependencies (npm run local:setup) aren't installed.
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import fs from "node:fs";
+import { BrowserHub, normalizeUrl } from "../chromium/core.js";
+import { CHROME, servePages, jpegSize, until } from "./helpers/pages.mjs";
 
-const chrome = ["/usr/bin/chromium", "/usr/bin/google-chrome"].find((p) => fs.existsSync(p));
-process.env.NODE_ENV = "test";
-process.env.ALLOW_PRIVATE = "1";
-if (chrome) process.env.CHROMIUM_PATH = chrome;
+let puppeteer = null;
+try {
+  ({ puppeteer } = await (await import("../chromium/server.js")).loadDeps());
+} catch {}
+const skip = !CHROME ? "no Chrome installed" : !puppeteer ? "run npm run local:setup" : false;
 
-const PAGE = `<!doctype html><title>Test Home</title><body style="margin:0;height:3000px">
-<button id=b style="position:absolute;left:0;top:0;width:200px;height:100px" onclick="document.title='Clicked'">Click</button>
-<form onsubmit="document.title='Typed:'+document.getElementById('i').value;return false">
-<input id=i style="position:absolute;left:0;top:150px;width:200px;height:40px"></form></body>`;
+test("normalizeUrl: schemes kept, localhost → http, hosts → https, words → search", () => {
+  assert.equal(normalizeUrl("https://a.b/c"), "https://a.b/c");
+  assert.equal(normalizeUrl("about:blank"), "about:blank");
+  assert.equal(normalizeUrl("localhost:3000/x"), "http://localhost:3000/x");
+  assert.equal(normalizeUrl("example.com/path"), "https://example.com/path");
+  assert.equal(normalizeUrl("example.com:8080/x"), "https://example.com:8080/x");
+  assert.equal(normalizeUrl("data:text/html,hi"), "data:text/html,hi");
+  assert.equal(normalizeUrl("moon landing"), "https://duckduckgo.com/?q=moon%20landing");
+  assert.equal(normalizeUrl("  "), null);
+});
 
-test("embedded Chromium: frames, navigation, clicks, typing", { skip: !chrome && "no Chrome installed" }, async () => {
-  const site = http.createServer((q, r) => { r.writeHead(200, { "content-type": "text/html" }); r.end(PAGE); });
-  await new Promise((r) => site.listen(0, r));
-  const { server, shutdown } = await import("../chromium/server.js");
-  await new Promise((r) => server.listen(0, r));
-  after(() => { shutdown(); server.close(); site.close(); });
+let site, hub, events, frames;
+const lastTabs = () => [...events].reverse().find((e) => e.ev === "tabs")?.data;
+const activeTitle = () => {
+  const t = lastTabs();
+  return t && t.tabs.find((x) => x.id === t.active)?.title;
+};
+const titleIs = (re, ms) => until(() => re.test(activeTitle() || ""), ms, "title " + re);
 
-  const h = await (await fetch(`http://127.0.0.1:${server.address().port}/health`)).json();
-  assert.equal(h.chromium, true);
-
-  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}/ws`);
-  const msgs = [];
-  let frames = 0;
-  ws.addEventListener("message", (e) => {
-    const m = JSON.parse(e.data);
-    if (m.t === "frame") { frames++; assert.ok(m.data.length > 100); }
-    msgs.push(m);
+before(async () => {
+  if (skip) return;
+  site = await servePages();
+  events = [];
+  frames = [];
+  hub = new BrowserHub({
+    launch: () => puppeteer.launch({ headless: true, executablePath: CHROME, args: ["--disable-dev-shm-usage", "--no-sandbox"] }),
+    startUrl: site.base + "/home.html",
+    viewport: { width: 1280, height: 720 },
+    jpegQuality: 60,
+    emit: (ev, data) => events.push({ ev, data }),
+    emitFrame: (bytes) => frames.push(bytes),
   });
-  const until = async (pred, ms = 20000) => {
-    const t0 = Date.now();
-    while (Date.now() - t0 < ms) {
-      const hit = msgs.find(pred);
-      if (hit) return hit;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    throw new Error("timeout; last msgs: " + JSON.stringify(msgs.slice(-5).map((m) => ({ ...m, data: undefined }))));
-  };
-  await new Promise((r) => ws.addEventListener("open", r));
-  const send = (o) => ws.send(JSON.stringify(o));
-  send({ t: "hello", vw: 800, vh: 500, mobile: false });
-  await until((m) => m.t === "ready");
-  send({ t: "nav", url: `http://127.0.0.1:${site.address().port}/` });
-  await until((m) => m.t === "info" && m.title === "Test Home");
-  await until(() => frames > 0);
-  send({ t: "mouse", type: "down", x: 50, y: 50 });
-  send({ t: "mouse", type: "up", x: 50, y: 50 });
-  await until((m) => m.t === "info" && m.title === "Clicked");
-  send({ t: "mouse", type: "down", x: 50, y: 170 });
-  send({ t: "mouse", type: "up", x: 50, y: 170 });
-  send({ t: "text", text: "hello moon" });
-  send({ t: "key", key: "Enter" });
-  await until((m) => m.t === "info" && m.title === "Typed:hello moon");
-  const before = frames;
-  send({ t: "wheel", x: 100, y: 100, dx: 0, dy: 800 });
-  await until(() => frames > before);
-  send({ t: "nav", url: "file:///etc/passwd" });
-  assert.match((await until((m) => m.t === "error")).msg, /http/);
-  send({ t: "back" });
-  ws.close();
-  await new Promise((r) => setTimeout(r, 300));
+});
+after(async () => {
+  if (hub) await hub.close();
+  if (site) site.stop();
+});
+
+test("BrowserHub drives a real Chromium", { skip }, async (t) => {
+  await t.test("launch, greet and live JPEG frames", async () => {
+    await hub.ensure();
+    await titleIs(/^Home$/);
+    await until(() => frames.length > 0, 10000, "first frame");
+    assert.deepEqual([...frames[0].subarray(0, 2)], [0xff, 0xd8], "frames are JPEG");
+    await until(() => jpegSize(frames.at(-1))?.w === 1280, 8000, "1280px frame");
+    assert.deepEqual(jpegSize(frames.at(-1)), { w: 1280, h: 720 });
+    const sent = [];
+    hub.greet((s) => sent.push(JSON.parse(s).ev), (b) => sent.push(b.length > 100 ? "frame" : "tiny"));
+    assert.deepEqual(sent, ["hello", "status", "tabs", "crawl", "frame"]);
+  });
+
+  await t.test("mouse click", async () => {
+    await hub.handle({ type: "mouse", action: "move", x: 0.05, y: 150 / 720 });
+    await hub.handle({ type: "mouse", action: "down", x: 0.05, y: 150 / 720 });
+    await hub.handle({ type: "mouse", action: "up", x: 0.05, y: 150 / 720 });
+    await titleIs(/^Clicked$/);
+  });
+
+  await t.test("popup links are adopted as a new active tab", async () => {
+    await hub.handle({ type: "mouse", action: "down", x: 0.05, y: 330 / 720 });
+    await hub.handle({ type: "mouse", action: "up", x: 0.05, y: 330 / 720 });
+    await until(() => lastTabs()?.tabs.length === 2, 10000, "popup tab");
+    await titleIs(/^Popup$/);
+  });
+
+  await t.test("switch, closeTab, newTab", async () => {
+    const tabs = lastTabs().tabs;
+    await hub.handle({ type: "switch", id: tabs[0].id });
+    assert.equal(lastTabs().active, tabs[0].id);
+    await hub.handle({ type: "closeTab", id: tabs[1].id });
+    await until(() => lastTabs().tabs.length === 1, 5000, "tab closed");
+    const r = await hub.handle({ type: "newTab", url: site.base + "/keys.html" });
+    assert.equal(r.ok, true);
+    await until(() => lastTabs().tabs.length === 2 && lastTabs().active === r.id, 5000, "new tab active");
+    await titleIs(/^keys$/);
+  });
+
+  await t.test("typing and key combos (Control+a)", async () => {
+    await hub.handle({ type: "mouse", action: "down", x: 0.1, y: 0.04 });
+    await hub.handle({ type: "mouse", action: "up", x: 0.1, y: 0.04 });
+    await hub.handle({ type: "press", key: "Control+a" });
+    await hub.handle({ type: "type", text: "new" });
+    await titleIs(/^val:new$/);
+    await hub.handle({ type: "press", key: "Backspace" });
+    await titleIs(/^val:ne$/);
+  });
+
+  await t.test("wheel scrolls the page under the mouse", async () => {
+    await hub.handle({ type: "navigate", url: site.base + "/touch.html" });
+    await titleIs(/^touch:0:0:0:0$/);
+    await hub.handle({ type: "mouse", action: "move", x: 0.5, y: 0.5 });
+    await hub.handle({ type: "wheel", dx: 0, dy: 700 });
+    await titleIs(/^touch:\d+:\d+:\d+:[1-9]\d*$/);
+  });
+
+  await t.test("touch: real touch events, native scrolling, multi-touch", async () => {
+    await hub.handle({ type: "navigate", url: site.base + "/touch.html?fresh" });
+    await titleIs(/^touch:0:0:0:0$/);
+    await hub.handle({ type: "touch", action: "start", points: [{ id: 0, x: 0.5, y: 0.8 }] });
+    for (let y = 0.75; y >= 0.2; y -= 0.05) await hub.handle({ type: "touch", action: "move", points: [{ id: 0, x: 0.5, y }] });
+    await hub.handle({ type: "touch", action: "end", points: [] });
+    const scrolled = await until(() => {
+      const m = /^touch:(\d+):(\d+):(\d+):(\d+)$/.exec(activeTitle() || "");
+      return m && +m[2] >= 1 && +m[3] >= 1 && +m[4] > 0 && m;
+    }, 8000, "touch scroll");
+    assert.ok(+scrolled[4] > 100, "page scrolled by the swipe: " + scrolled[0]);
+    await hub.handle({ type: "touch", action: "start", points: [{ id: 0, x: 0.3, y: 0.5 }] });
+    await hub.handle({ type: "touch", action: "start", points: [{ id: 0, x: 0.3, y: 0.5 }, { id: 1, x: 0.7, y: 0.5 }] });
+    await hub.handle({ type: "touch", action: "end", points: [] });
+    await titleIs(/^touch:2:/);
+    await assert.rejects(hub.handle({ type: "touch", action: "wiggle", points: [] }), /bad touch action/);
+  });
+
+  await t.test("viewport changes the frame size", async () => {
+    const r = await hub.handle({ type: "viewport", width: 800, height: 600 });
+    assert.deepEqual(r.viewport, { width: 800, height: 600 });
+    const n = frames.length;
+    await until(() => frames.length > n && jpegSize(frames.at(-1))?.w === 800, 8000, "800px frame");
+    assert.deepEqual(jpegSize(frames.at(-1)), { w: 800, h: 600 });
+  });
+
+  await t.test("auto-browse follows links on its own", async () => {
+    await hub.handle({ type: "navigate", url: site.base + "/a.html" });
+    await titleIs(/^A$/);
+    const r = await hub.handle({ type: "crawl", on: true, dwell: 1, sameOrigin: true, scroll: false, max: 2, reset: true });
+    assert.equal(r.crawl.on, true);
+    await until(() => events.some((e) => e.ev === "toast" && /Auto-browse finished: 2 pages/.test(e.data.text)), 20000, "crawl to finish");
+    const visited = new Set(events.filter((e) => e.ev === "crawl" && e.data.current).map((e) => e.data.current.split("/").pop()));
+    assert.ok(visited.size >= 2, "visited " + [...visited]);
+    assert.equal(hub.crawlState().on, false);
+    const q = await hub.handle({ type: "enqueue", urls: ["example.org", "example.org", "ftp://x"] });
+    assert.equal(q.added, 1);
+  });
+
+  await t.test("page dialogs don't freeze the tab", async () => {
+    await hub.handle({ type: "navigate", url: site.base + "/alert.html" });
+    await titleIs(/^after$/);
+    assert.ok(events.some((e) => e.ev === "toast" && /alert: Hello from the page/.test(e.data.text)));
+  });
+
+  await t.test("unknown commands and bad input", async () => {
+    assert.deepEqual(await hub.handle({ type: "nope" }), { error: "unknown command nope" });
+    assert.deepEqual(await hub.handle(null), { error: "bad command" });
+    assert.deepEqual(await hub.handle({ type: "ping" }), { ok: true });
+  });
+
+  await t.test("close, then any command relaunches Chromium", async () => {
+    await hub.close();
+    assert.equal(hub.state.state, "closed");
+    assert.equal(hub.alive, false);
+    await hub.handle({ type: "ping" });
+    assert.equal(hub.alive, true);
+    await until(() => hub.state.state === "ready", 10000, "ready again");
+  });
 });

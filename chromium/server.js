@@ -1,456 +1,266 @@
-// Relax Hub — embedded Chromium.
-// Runs a real headless Chromium and streams it live into the game's Browser app:
-//   WS  /ws      →  {t:"hello", vw, vh, mobile}  then input events
-//                ←  {t:"frame", data(base64 jpeg), w, h} · {t:"info", url, title} · {t:"error"}
-//   GET /health
-// Talks to Chromium directly over the Chrome DevTools Protocol — no npm packages.
+// Relax Hub — local Chromium server (the "local Node" option).
+//
+// A real Chromium driven over CDP through Puppeteer (chromium/core.js →
+// BrowserHub). The game's Chromium window connects with one WebSocket:
+//   ws://127.0.0.1:7860/api/ws?s=<session>&key=<key>
+// Text messages are JSON ({ev, data} from here, {type, …, rid} commands from the
+// game, {ev:"reply", rid, data} replies); binary messages are JPEG frames.
+//
+//   npm run local:setup     # once: installs puppeteer + ws into chromium/ (Cloudflare builds never download Chrome)
+//   npm run local           # → http://127.0.0.1:7860, prints the access key
+//   npm run local:headed    # same, with a visible Chromium window
+//
+// Env: PORT=7860  HOST=127.0.0.1  HEADLESS=1|0  CHROMIUM_PATH=/path/to/chrome
+//      VIEWPORT_W=1280 VIEWPORT_H=720  START_URL=…  JPEG_QUALITY=70
+//      ACCESS_KEY=…   (default: a random key printed at start; "off" disables it)
+//      ALLOWED_ORIGIN=https://your-game.workers.dev,…   (default: any page that has the key)
+//      MAX_SESSIONS=2  IDLE_SECONDS=120  ALLOW_PRIVATE=1 (let an exposed server open LAN addresses)
+//      CHROMIUM_NO_SANDBOX=1 (containers)
+//
+// Bound to 127.0.0.1 by default: anyone who can reach this server can drive the
+// browser, so only set HOST=0.0.0.0 on a machine you control, with a key.
 
 import http from "node:http";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawn } from "node:child_process";
-import { upgradeToWebSocket } from "../server/ws.js";
+import crypto from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { BrowserHub } from "./core.js";
 
-const PORT = Number(process.env.PORT) || 7860;
-const CHROME = process.env.CHROMIUM_PATH || findChrome();
-const MAX_SESSIONS = Number(process.env.MAX_SESSIONS) || 2;
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
-const SESSION_IDLE_MS = (Number(process.env.SESSION_IDLE_SECONDS) || 600) * 1000;
-const CHROME_IDLE_MS = 60_000;
-const JPEG_QUALITY = Number(process.env.JPEG_QUALITY) || 55;
-const ALLOW_PRIVATE = process.env.ALLOW_PRIVATE === "1"; // tests only
-const MOBILE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
+const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
 
-function findChrome() {
-  for (const p of ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"]) {
-    if (fs.existsSync(p)) return p;
-  }
-  return "chromium";
-}
-const clamp = (v, lo, hi, d) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
-};
-
-export function isBlockedHost(h) {
-  if (ALLOW_PRIVATE) return false;
-  h = String(h).toLowerCase().replace(/^\[|\]$/g, "");
+/** true for loopback / private / link-local / internal hostnames (and literal IPs in those ranges) */
+export function isPrivateHost(hostname) {
+  const h = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
   return (
     h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal") ||
-    h === "0.0.0.0" || h === "::1" || h === "metadata.google.internal" ||
+    h === "0.0.0.0" || h === "::" || h === "::1" || h === "metadata.google.internal" ||
     /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^(fc|fd|fe80)/.test(h) || /^0\./.test(h)
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h) ||
+    /^(fc|fd)[0-9a-f]{2}:/.test(h) || /^fe80:/.test(h) || /^::ffff:/.test(h)
   );
 }
-export function safeUrl(input) {
-  let u;
-  try {
-    u = new URL(String(input || ""));
-  } catch {
-    throw new Error("That doesn't look like a web address.");
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("Only http(s) pages are allowed.");
-  if (isBlockedHost(u.hostname)) throw new Error("Private and local addresses are blocked.");
-  return u.toString();
-}
 
-// ------------------------------------------------------------ CDP client ---
-class CDP {
-  constructor(url) {
-    this.ws = new WebSocket(url);
-    this.id = 0;
-    this.pending = new Map();
-    this.handlers = new Map();
-    this.closed = false;
-    this.ready = new Promise((res, rej) => {
-      this.ws.addEventListener("open", res, { once: true });
-      this.ws.addEventListener("error", () => rej(new Error("Could not connect to Chromium")), { once: true });
-    });
-    this.ws.addEventListener("message", (e) => this.onMessage(e.data));
-    this.ws.addEventListener("close", () => {
-      this.closed = true;
-      for (const p of this.pending.values()) p.reject(new Error("Chromium connection closed"));
-      this.pending.clear();
-    });
-  }
-  send(method, params = {}, sessionId) {
-    if (this.closed) return Promise.reject(new Error("Chromium connection closed"));
-    const id = ++this.id;
-    const msg = { id, method, params };
-    if (sessionId) msg.sessionId = sessionId;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, method });
-      this.ws.send(JSON.stringify(msg));
-    });
-  }
-  on(method, fn) {
-    if (!this.handlers.has(method)) this.handlers.set(method, new Set());
-    this.handlers.get(method).add(fn);
-    return () => this.handlers.get(method).delete(fn);
-  }
-  onMessage(raw) {
-    let m;
-    try {
-      m = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (m.id) {
-      const p = this.pending.get(m.id);
-      if (!p) return;
-      this.pending.delete(m.id);
-      if (m.error) p.reject(new Error(`${p.method}: ${m.error.message}`));
-      else p.resolve(m.result);
-      return;
-    }
-    const hs = this.handlers.get(m.method);
-    if (hs) for (const fn of hs) fn(m.params, m.sessionId);
-  }
-  close() {
-    try {
-      this.ws.close();
-    } catch {}
-  }
-}
-
-// ------------------------------------------------------- Chromium process ---
-const state = { chrome: null, launching: null, idleTimer: null };
-const sessions = new Set();
-const byTarget = new Map();
-
-async function launchChrome() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "relax-chromium-"));
-  const args = [
-    "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-    "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-sync",
-    "--disable-background-networking", "--disable-default-apps", "--disable-component-update",
-    "--mute-audio", "--password-store=basic", "--use-mock-keychain",
-    "--disable-features=IsolateOrigins,site-per-process,Translate,MediaRouter,OptimizationHints,InterestFeedContentSuggestions",
-    "--renderer-process-limit=4", "--window-size=1024,640",
-    `--user-data-dir=${dir}`, "--remote-debugging-port=0", "--remote-allow-origins=*", "about:blank",
-  ];
-  const proc = spawn(CHROME, args, { stdio: ["ignore", "ignore", "pipe"] });
-  const url = await new Promise((resolve, reject) => {
-    let buf = "", done = false;
-    const t = setTimeout(() => reject(new Error("Chromium didn't start in time")), 45000);
-    proc.stderr.on("data", (d) => {
-      if (done) return;
-      buf += d;
-      const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
-      if (m) {
-        done = true;
-        clearTimeout(t);
-        resolve(m[1]);
-      } else if (buf.length > 20000) buf = buf.slice(-2000);
-    });
-    proc.on("error", (e) => { clearTimeout(t); reject(e); });
-    proc.on("exit", (code) => { if (!done) { clearTimeout(t); reject(new Error(`Chromium exited early (${code})`)); } });
-  });
-  const cdp = new CDP(url);
-  await cdp.ready;
-  const version = await cdp.send("Browser.getVersion");
-  await cdp.send("Target.setDiscoverTargets", { discover: true });
-  const chrome = {
-    proc, cdp, dir,
-    desktopUA: String(version.userAgent || "").replace("HeadlessChrome", "Chrome"),
-    close() {
-      cdp.close();
-      try { proc.kill("SIGKILL"); } catch {}
-    },
+/** Navigation guard for a server other machines can reach: http(s) + about: only, no private hosts. */
+export function makeUrlGuard({ allowPrivate = false } = {}) {
+  return (raw) => {
+    let u;
+    try { u = new URL(raw); } catch { return "That doesn't look like a web address."; }
+    if (u.protocol === "about:") return true;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "Only http(s) pages can be opened here.";
+    if (!allowPrivate && isPrivateHost(u.hostname)) return "Private and local addresses are blocked on this server.";
+    return true;
   };
-  cdp.on("Target.targetInfoChanged", ({ targetInfo }) => byTarget.get(targetInfo.targetId)?.info(targetInfo));
-  proc.on("exit", () => {
-    cdp.close();
-    if (state.chrome === chrome) state.chrome = null;
-    for (const s of [...sessions]) if (s.chrome === chrome) s.fail("Chromium restarted — tap reconnect.");
-    fs.rm(dir, { recursive: true, force: true }, () => {});
-  });
-  console.log(`Chromium ready: ${version.product}`);
-  return chrome;
 }
 
-async function getChrome() {
-  clearTimeout(state.idleTimer);
-  if (state.chrome && !state.chrome.cdp.closed) return state.chrome;
-  if (!state.launching) {
-    state.launching = launchChrome()
-      .then((c) => (state.chrome = c))
-      .finally(() => (state.launching = null));
-  }
-  return state.launching;
-}
-function scheduleChromeStop() {
-  clearTimeout(state.idleTimer);
-  if (sessions.size) return;
-  state.idleTimer = setTimeout(() => {
-    if (!sessions.size && state.chrome) {
-      state.chrome.close();
-      state.chrome = null;
-      console.log("Chromium stopped (idle)");
-    }
-  }, CHROME_IDLE_MS);
-}
-
-// ------------------------------------------------------------- sessions ---
-const KEYS = {
-  Enter: { code: "Enter", vk: 13, text: "\r" }, Backspace: { code: "Backspace", vk: 8 }, Tab: { code: "Tab", vk: 9 },
-  Escape: { code: "Escape", vk: 27 }, Delete: { code: "Delete", vk: 46 }, " ": { code: "Space", vk: 32, text: " " },
-  ArrowLeft: { code: "ArrowLeft", vk: 37 }, ArrowUp: { code: "ArrowUp", vk: 38 }, ArrowRight: { code: "ArrowRight", vk: 39 },
-  ArrowDown: { code: "ArrowDown", vk: 40 }, PageUp: { code: "PageUp", vk: 33 }, PageDown: { code: "PageDown", vk: 34 },
-  Home: { code: "Home", vk: 36 }, End: { code: "End", vk: 35 },
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
+const cleanSid = (s) => String(s || "default").replace(/[^\w-]/g, "").slice(0, 64) || "default";
 
-class Session {
-  constructor(ws) {
-    this.ws = ws;
-    this.last = Date.now();
-    this.paused = false;
-    this.ready = false;
-    this.queue = [];
-    this.off = [];
-    this.vp = { vw: 1024, vh: 640, mobile: false };
+/** puppeteer (or puppeteer-core) + ws, installed by `npm run local:setup`. */
+export async function loadDeps() {
+  let puppeteer, WebSocketServer;
+  try {
+    puppeteer = (await import("puppeteer")).default;
+  } catch {
+    try { puppeteer = (await import("puppeteer-core")).default; } catch {}
   }
-  send(obj) {
-    if (this.ws.open) this.ws.send(JSON.stringify(obj));
+  try { ({ WebSocketServer } = await import("ws")); } catch {}
+  if (!puppeteer || !WebSocketServer) {
+    throw Object.assign(new Error("Missing local dependencies. Run:  npm run local:setup"), { code: "DEPS" });
   }
-  fail(msg) {
-    this.send({ t: "error", msg, fatal: true });
-    this.ws.close(1011);
-  }
-  async start(hello) {
-    this.chrome = await getChrome();
-    const cdp = (this.cdp = this.chrome.cdp);
-    const { browserContextId } = await cdp.send("Target.createBrowserContext", { disposeOnDetach: true });
-    this.ctx = browserContextId;
-    const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank", browserContextId });
-    this.targetId = targetId;
-    byTarget.set(targetId, this);
-    const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
-    this.sid = sessionId;
-    this.S = (m, p) => cdp.send(m, p, this.sid);
-    const mine = (fn) => (p, sid) => sid === this.sid && fn(p);
-    this.off.push(cdp.on("Page.screencastFrame", mine((p) => this.frame(p))));
-    this.off.push(cdp.on("Fetch.requestPaused", mine((p) => this.filter(p))));
-    this.off.push(cdp.on("Page.javascriptDialogOpening", mine(() => this.S("Page.handleJavaScriptDialog", { accept: false }).catch(() => {}))));
-    this.off.push(cdp.on("Page.loadEventFired", mine(() => {
-      this.send({ t: "loaded" });
-      this.refreshInfo();
-    })));
-    // titles don't always arrive as events, so check the current one now and then
-    this.infoTimer = setInterval(() => this.refreshInfo(), 1200);
-    await this.S("Page.enable");
-    await this.S("Fetch.enable", { patterns: [{ urlPattern: "*" }] });
-    await cdp.send("Browser.setDownloadBehavior", { behavior: "deny", browserContextId }).catch(() => {});
-    await this.resize(hello);
-    this.ready = true;
-    this.send({ t: "ready" });
-    if (hello.url) await this.handle(JSON.stringify({ t: "nav", url: hello.url }));
-    for (const raw of this.queue.splice(0)) await this.handle(raw);
-  }
-  filter(p) {
-    let blocked = false;
-    try {
-      const u = new URL(p.request.url);
-      if (u.protocol === "file:" || u.protocol === "chrome:" || ((u.protocol === "http:" || u.protocol === "https:" || u.protocol === "ws:" || u.protocol === "wss:") && isBlockedHost(u.hostname))) blocked = true;
-    } catch {}
-    (blocked
-      ? this.S("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" })
-      : this.S("Fetch.continueRequest", { requestId: p.requestId })
-    ).catch(() => {});
-  }
-  frame(p) {
-    const ack = () => this.S("Page.screencastFrameAck", { sessionId: p.sessionId }).catch(() => {});
-    if (!this.ws.open) return;
-    this.ws.send(JSON.stringify({ t: "frame", data: p.data, w: p.metadata.deviceWidth, h: p.metadata.deviceHeight }));
-    // backpressure: only ask for the next frame once the socket has drained
-    if (this.ws.socket.writableLength > 256 * 1024) this.ws.socket.once("drain", ack);
-    else ack();
-  }
-  info(ti) {
-    if (ti.type !== "page") return;
-    const key = ti.url + "\u0000" + ti.title;
-    if (key === this.lastInfo) return;
-    this.lastInfo = key;
-    this.send({ t: "info", url: ti.url, title: ti.title });
-  }
-  refreshInfo() {
-    if (!this.cdp || this.cdp.closed || this.closed) return;
-    this.cdp.send("Target.getTargetInfo", { targetId: this.targetId }).then((r) => this.info(r.targetInfo), () => {});
-  }
-  async resize(m) {
-    const mobile = !!m.mobile;
-    const vw = Math.round(clamp(m.vw, 320, 1440, mobile ? 390 : 1024));
-    const vh = Math.round(clamp(m.vh, 240, 1600, mobile ? 700 : 640));
-    const changedMode = this.vp.mobile !== mobile;
-    this.vp = { vw, vh, mobile };
-    await this.S("Emulation.setDeviceMetricsOverride", { width: vw, height: vh, deviceScaleFactor: 1, mobile });
-    await this.S("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 }).catch(() => {});
-    await this.S("Emulation.setUserAgentOverride", { userAgent: mobile ? MOBILE_UA : this.chrome.desktopUA }).catch(() => {});
-    if (changedMode && this.ready) await this.S("Page.reload", {}).catch(() => {});
-    await this.screencast();
-  }
-  async screencast() {
-    if (this.paused) return;
-    await this.S("Page.stopScreencast").catch(() => {});
-    await this.S("Page.startScreencast", { format: "jpeg", quality: JPEG_QUALITY, maxWidth: this.vp.vw, maxHeight: this.vp.vh, everyNthFrame: 1 });
-  }
-  async handle(raw) {
-    let m;
-    try {
-      m = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!m || typeof m !== "object") return;
-    this.last = Date.now();
-    if (m.t === "ping") return this.send({ t: "pong" });
-    if (!this.ready) {
-      if (this.queue.length < 50) this.queue.push(raw);
-      return;
-    }
-    const S = this.S;
-    const x = clamp(m.x, 0, this.vp.vw, 0), y = clamp(m.y, 0, this.vp.vh, 0);
-    try {
-      switch (m.t) {
-        case "nav":
-          await S("Page.navigate", { url: safeUrl(m.url) });
-          break;
-        case "back":
-        case "forward": {
-          const h = await S("Page.getNavigationHistory");
-          const e = h.entries[h.currentIndex + (m.t === "back" ? -1 : 1)];
-          if (e) await S("Page.navigateToHistoryEntry", { entryId: e.id });
-          break;
-        }
-        case "reload":
-          await S("Page.reload", {});
-          break;
-        case "mouse": {
-          const type = { down: "mousePressed", up: "mouseReleased", move: "mouseMoved" }[m.type];
-          if (!type) return;
-          const pressed = type === "mousePressed" || (type === "mouseMoved" && m.buttons);
-          await S("Input.dispatchMouseEvent", {
-            type, x, y,
-            button: type === "mouseMoved" && !m.buttons ? "none" : "left",
-            buttons: pressed ? 1 : 0,
-            clickCount: type === "mouseMoved" ? 0 : 1,
-          });
-          break;
-        }
-        case "wheel":
-          await S("Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX: clamp(m.dx, -4000, 4000, 0), deltaY: clamp(m.dy, -4000, 4000, 0) });
-          break;
-        case "text": {
-          const text = String(m.text || "").slice(0, 1000);
-          if (text) await S("Input.insertText", { text });
-          break;
-        }
-        case "key": {
-          const k = KEYS[m.key];
-          if (!k) return;
-          const base = { key: m.key, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk };
-          await S("Input.dispatchKeyEvent", { type: "keyDown", ...base, ...(k.text ? { text: k.text } : {}) });
-          await S("Input.dispatchKeyEvent", { type: "keyUp", ...base });
-          break;
-        }
-        case "resize":
-          await this.resize(m);
-          break;
-        case "pause":
-          this.paused = true;
-          await S("Page.stopScreencast").catch(() => {});
-          break;
-        case "resume":
-          this.paused = false;
-          await this.screencast();
-          break;
-      }
-    } catch (e) {
-      this.send({ t: "error", msg: String(e.message || e).replace(/^Page\.navigate: /, "") });
-    }
-  }
-  async close() {
-    if (this.closed) return;
-    this.closed = true;
-    sessions.delete(this);
-    clearInterval(this.infoTimer);
-    for (const off of this.off) off();
-    if (this.targetId) byTarget.delete(this.targetId);
-    if (this.ctx && this.cdp && !this.cdp.closed) await this.cdp.send("Target.disposeBrowserContext", { browserContextId: this.ctx }).catch(() => {});
-    scheduleChromeStop();
-  }
+  return { puppeteer, WebSocketServer };
 }
 
-setInterval(() => {
-  const now = Date.now();
-  for (const s of sessions) if (now - s.last > SESSION_IDLE_MS) s.fail("Closed after a long break — tap reconnect.");
-}, 30_000).unref();
+/**
+ * Build the server (not listening yet). Options default to the env vars above.
+ * → { server, sessions, accessKey, close() }
+ */
+export async function createChromiumServer(opts = {}) {
+  const env = process.env;
+  const o = {
+    host: opts.host ?? env.HOST ?? "127.0.0.1",
+    headless: opts.headless ?? (env.HEADLESS !== "0" && !process.argv.includes("--headed")),
+    chromiumPath: opts.chromiumPath ?? env.CHROMIUM_PATH ?? undefined,
+    viewport: opts.viewport ?? { width: +env.VIEWPORT_W || 1280, height: +env.VIEWPORT_H || 720 },
+    startUrl: opts.startUrl ?? env.START_URL ?? undefined,
+    jpegQuality: opts.jpegQuality ?? (+env.JPEG_QUALITY || 70),
+    maxSessions: opts.maxSessions ?? Math.max(1, +env.MAX_SESSIONS || 2),
+    idleSeconds: opts.idleSeconds ?? Math.max(1, +env.IDLE_SECONDS || 120),
+    allowedOrigins: (opts.allowedOrigin ?? env.ALLOWED_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    allowPrivate: opts.allowPrivate ?? env.ALLOW_PRIVATE === "1",
+  };
+  let accessKey = opts.accessKey ?? env.ACCESS_KEY ?? "";
+  if (accessKey === "off") accessKey = "";
+  else if (!accessKey) accessKey = crypto.randomBytes(9).toString("base64url");
+  const exposed = !LOOPBACK.has(o.host);
+  const { puppeteer, WebSocketServer } = opts.deps || (await loadDeps());
 
-// ------------------------------------------------------------ HTTP + WS ---
-const cors = (origin) => ({
-  "access-control-allow-origin": ALLOWED_ORIGIN === "*" ? "*" : ALLOWED_ORIGIN.split(",").includes(origin) ? origin : "null",
-  "access-control-allow-methods": "GET, OPTIONS",
-  vary: "origin",
-});
-
-export const server = http.createServer((req, res) => {
-  const p = new URL(req.url, "http://x").pathname;
-  if (req.method === "OPTIONS") {
-    res.writeHead(204, cors(req.headers.origin));
-    return res.end();
-  }
-  if (p === "/health" || p === "/api/health") {
-    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", ...cors(req.headers.origin) });
-    return res.end(JSON.stringify({ ok: true, chromium: true, sessions: sessions.size, max: MAX_SESSIONS, running: Boolean(state.chrome) }));
-  }
-  res.writeHead(p === "/" ? 200 : 404, { "content-type": "text/plain; charset=utf-8", ...cors(req.headers.origin) });
-  res.end(p === "/" ? "🌐 Relax Hub Chromium is running.\n" : "Not found\n");
-});
-
-server.on("upgrade", (req, socket) => {
-  const p = new URL(req.url, "http://x").pathname;
-  if (p !== "/ws") return socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
-  const origin = req.headers.origin;
-  if (ALLOWED_ORIGIN !== "*" && origin && !ALLOWED_ORIGIN.split(",").includes(origin)) return socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
-  const ws = upgradeToWebSocket(req, socket);
-  if (!ws) return;
-  if (sessions.size >= MAX_SESSIONS) {
-    ws.send(JSON.stringify({ t: "error", fatal: true, msg: `All ${MAX_SESSIONS} Chromium seats are taken — try again in a minute.` }));
-    return setTimeout(() => ws.close(1013), 100);
-  }
-  const s = new Session(ws);
-  sessions.add(s);
-  clearTimeout(state.idleTimer);
-  let started = false;
-  ws.on("message", (raw) => {
-    if (raw === "ping") return ws.send("pong");
-    if (!started) {
-      let hello;
-      try {
-        hello = JSON.parse(raw);
-      } catch {
-        return;
-      }
-      if (hello.t !== "hello") return;
-      started = true;
-      s.send({ t: "starting" });
-      s.start(hello).catch((e) => s.fail("Couldn't start Chromium: " + (e.message || e)));
-      return;
-    }
-    s.handle(raw);
+  const launch = (viewport) => puppeteer.launch({
+    headless: o.headless,
+    defaultViewport: viewport ? { ...viewport, deviceScaleFactor: 1 } : undefined, // first frames already at the right size
+    executablePath: o.chromiumPath || undefined,
+    // containers (and root) can't use Chrome's sandbox
+    args: ["--disable-dev-shm-usage", "--autoplay-policy=no-user-gesture-required", ...(env.CHROMIUM_NO_SANDBOX === "1" || process.getuid?.() === 0 ? ["--no-sandbox"] : [])],
   });
-  ws.on("close", () => s.close());
-});
 
-/** Stop Chromium now (used by tests and on shutdown). */
-export function shutdown() {
-  clearTimeout(state.idleTimer);
-  if (state.chrome) state.chrome.close();
-  state.chrome = null;
+  /** sid → { hub, clients:Set<ws>, idleTimer, lastSeen } */
+  const sessions = new Map();
+
+  function getSession(sid) {
+    let s = sessions.get(sid);
+    if (s) return s;
+    if (sessions.size >= o.maxSessions) {
+      // make room: close the session that has been without viewers the longest
+      const idle = [...sessions.entries()].filter(([, x]) => !x.clients.size).sort((a, b) => a[1].lastSeen - b[1].lastSeen)[0];
+      if (!idle) return null;
+      dropSession(idle[0]);
+    }
+    s = { clients: new Set(), idleTimer: null, lastSeen: Date.now() };
+    s.hub = new BrowserHub({
+      launch: () => launch(s.hub.viewport),
+      startUrl: o.startUrl,
+      viewport: { ...o.viewport },
+      jpegQuality: o.jpegQuality,
+      allowUrl: exposed ? makeUrlGuard({ allowPrivate: o.allowPrivate }) : null,
+      emit: (ev, data) => {
+        const msg = JSON.stringify({ ev, data });
+        for (const ws of s.clients) if (ws.readyState === 1) ws.send(msg);
+      },
+      emitFrame: (bytes) => {
+        // a slow viewer loses frames, never state events
+        for (const ws of s.clients) if (ws.readyState === 1 && ws.bufferedAmount < 4e6) ws.send(bytes);
+      },
+    });
+    sessions.set(sid, s);
+    return s;
+  }
+  function dropSession(sid) {
+    const s = sessions.get(sid);
+    if (!s) return Promise.resolve();
+    sessions.delete(sid);
+    clearTimeout(s.idleTimer);
+    for (const ws of s.clients) try { ws.close(1001, "session closed"); } catch {}
+    return s.hub.close().catch(() => {});
+  }
+
+  const originOk = (origin) => !o.allowedOrigins.length || o.allowedOrigins.includes("*") || (origin && o.allowedOrigins.includes(origin));
+  const cors = (origin) => ({
+    "access-control-allow-origin": originOk(origin) ? origin || "*" : "null",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-private-network": "true", // Private Network Access preflights from https:// game pages
+    vary: "origin",
+  });
+
+  const server = http.createServer((req, res) => {
+    const { pathname } = new URL(req.url, "http://x");
+    const origin = req.headers.origin;
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, cors(origin));
+      return res.end();
+    }
+    if (pathname === "/api/health" || pathname === "/health") {
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", ...cors(origin) });
+      return res.end(JSON.stringify({ ok: true, chromium: true, keyRequired: Boolean(accessKey), sessions: sessions.size, maxSessions: o.maxSessions }));
+    }
+    if (pathname === "/") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(`<!doctype html><meta charset=utf-8><title>Relax Hub Chromium</title>
+<body style="font:16px system-ui;background:#0d0b1e;color:#f4efe1;padding:24px">
+<h1>🌐 Relax Hub Chromium is running</h1><p>Open the game, sit at the computer and start <b>Chromium</b>.
+${accessKey ? "It asks for the access key printed in the terminal that started this server." : ""}</p>`);
+    }
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("not found");
+  });
+
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url, "http://x");
+    if (url.pathname !== "/api/ws") return socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
+    if (!originOk(req.headers.origin)) return socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, url));
+  });
+
+  function onConnection(ws, url) {
+    // a wrong key gets a readable close code (4401) so the game can ask for it
+    if (accessKey && !safeEqual(url.searchParams.get("key") || "", accessKey)) {
+      ws.send(JSON.stringify({ ev: "auth", data: { ok: false } }));
+      return ws.close(4401, "access key required");
+    }
+    const sid = cleanSid(url.searchParams.get("s"));
+    const s = getSession(sid);
+    if (!s) {
+      ws.send(JSON.stringify({ ev: "toast", data: { text: `This Chromium server is busy (${o.maxSessions} sessions). Try again soon.` } }));
+      return ws.close(4429, "busy");
+    }
+    s.clients.add(ws);
+    s.lastSeen = Date.now();
+    clearTimeout(s.idleTimer);
+    s.hub.greet((t) => ws.send(t), (b) => ws.send(b));
+
+    // commands run one after another so mouse down/up and key order hold
+    let chain = Promise.resolve();
+    ws.on("message", (data, isBinary) => {
+      if (isBinary) return;
+      let cmd;
+      try { cmd = JSON.parse(data.toString()); } catch { return; }
+      chain = chain.then(async () => {
+        let out;
+        try { out = await s.hub.handle(cmd); } catch (e) { out = { error: String((e && e.message) || e).split("\n")[0] }; }
+        if (ws.readyState === 1) ws.send(JSON.stringify({ ev: "reply", rid: cmd && cmd.rid, data: out }));
+      });
+    });
+    const drop = () => {
+      if (!s.clients.delete(ws)) return;
+      s.lastSeen = Date.now();
+      if (s.clients.size) return;
+      clearTimeout(s.idleTimer);
+      // close Chromium IDLE_SECONDS after the last viewer leaves; the next command relaunches it
+      s.idleTimer = setTimeout(() => { if (!s.clients.size) s.hub.close().catch(() => {}); }, o.idleSeconds * 1000);
+    };
+    ws.on("close", drop);
+    ws.on("error", drop);
+    s.hub.ensure().catch(() => {});
+  }
+
+  async function close() {
+    await Promise.all([...sessions.keys()].map(dropSession));
+    for (const c of wss.clients) try { c.terminate(); } catch {}
+    const done = new Promise((r) => server.close(() => r()));
+    server.closeAllConnections?.();
+    await done;
+  }
+
+  return { server, sessions, accessKey, options: o, close };
 }
-for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => { shutdown(); process.exit(0); });
 
-if (process.env.NODE_ENV !== "test") {
-  server.listen(PORT, () => console.log(`Relax Hub Chromium listening on :${PORT} (${CHROME})`));
+// ---------------------------------------------------------------- CLI ---
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  const PORT = +process.env.PORT || 7860;
+  let app;
+  try {
+    app = await createChromiumServer();
+  } catch (e) {
+    console.error(e.code === "DEPS" ? e.message : "Couldn't start: " + e.message);
+    process.exit(1);
+  }
+  const { host } = app.options;
+  app.server.listen(PORT, host, () => {
+    const shown = host === "0.0.0.0" || host === "::" ? "localhost" : host;
+    console.log(`\n🌐 Relax Hub Chromium → http://${shown}:${PORT}  (${app.options.headless ? "headless" : "headed"}, ${fileURLToPath(import.meta.url)})`);
+    if (app.accessKey) {
+      console.log(`🔑 Access key: ${app.accessKey}`);
+      console.log(`   In the game: Chromium asks for it once. Or open the game with  ?bkey=${app.accessKey}`);
+    } else {
+      console.log("⚠ No access key (ACCESS_KEY=off): any page that can reach this server can drive the browser.");
+    }
+    if (!LOOPBACK.has(host)) console.log("⚠ Reachable from other machines (HOST=" + host + "). Private/LAN addresses are blocked unless ALLOW_PRIVATE=1.");
+    console.log("   Stop with Ctrl+C.\n");
+  });
+  const quit = async () => { await app.close().catch(() => {}); process.exit(0); };
+  process.on("SIGINT", quit);
+  process.on("SIGTERM", quit);
 }

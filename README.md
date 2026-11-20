@@ -65,21 +65,30 @@ Until a multiplayer binding exists, the game uses the fallback server in `hub/pu
 
 **Everything at once from your computer:** `npm install && npx wrangler login && npm run deploy` (multiplayer, browser, then the game).
 
-## Embedded Chromium (`chromium/`)
+## Chromium (`chromium/`) — local Node
 
-The **Chromium** app on the computer is a real headless Chromium running on the server, streamed live into the window (JPEG screencast over a WebSocket) with your clicks, touch-drags, scrolling and typing sent back through the Chrome DevTools Protocol. No API keys and no npm packages — just `chromium/Dockerfile`:
+The **Chromium** app on the computer is a real Chromium driven over the Chrome DevTools Protocol through Puppeteer, running on **your own computer**, streamed live into the window (CDP screencast → JPEG frames over one WebSocket). Taps and drags become real touch events (native scrolling with momentum, pinch), the mouse wheel scrolls, and the keyboard or the type box types — key combos like Ctrl+A included. It has tabs (popups open as new tabs), back/forward/reload, an address bar that searches DuckDuckGo for plain words, a "Fit window / Desktop / Tablet / Phone" screen size and **auto-browse** (follows random links on its own).
 
-| | |
-|---|---|
-| Render service | **relax-chromium** (Docker, `chromium/Dockerfile`, context = repo root) |
-| Also runs on | Fly.io, Koyeb, any Docker host. Hugging Face Spaces work too (ready-made files in `huggingface/chromium/`), but Docker Spaces now need a paid HF plan. |
-| Env vars | `MAX_SESSIONS` (default 2), `SESSION_IDLE_SECONDS` (600), `JPEG_QUALITY` (55), `ALLOWED_ORIGIN` |
+```bash
+npm run local:setup   # once: installs puppeteer + ws into chromium/ (downloads a Chrome for Testing)
+npm run local         # → http://127.0.0.1:7860, prints an access key
+```
 
-Each player gets their own incognito browser context; private/local addresses, `file://` and downloads are blocked, dialogs are auto-dismissed, and Chromium shuts down 60 s after the last player leaves.
+Open the game in a browser on the same computer, sit at the desk, start **Chromium** and paste the key once (or open the game with `?bkey=<key>`). If Chrome asks whether the site may reach apps on your device, allow it — that's the game talking to `127.0.0.1`.
 
-> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. On Cloudflare you need none of this: the game Worker has Chromium built in (Cloudflare Browser Run, free plan: 10 browser-minutes a day) and the Chromium app uses it automatically. `browser/` can still be deployed as a separate **relax-browser** Worker behind a `BROWSER_SVC` Service Binding if you prefer.
+| Env var | Default | |
+|---|---|---|
+| `PORT` / `HOST` | `7860` / `127.0.0.1` | Anyone who can reach the server can drive the browser — only use `HOST=0.0.0.0` on a machine you control |
+| `ACCESS_KEY` | random, printed at start | `off` disables it |
+| `ALLOWED_ORIGIN` | any page with the key | e.g. `https://multiplayer-relax.<you>.workers.dev` |
+| `CHROMIUM_PATH` | Puppeteer's Chrome | use an installed Chrome/Chromium instead |
+| `HEADLESS` | `1` | `npm run local:headed` shows the window |
+| `MAX_SESSIONS` / `IDLE_SECONDS` | `2` / `120` | one Chromium per session; closed 120 s after its last viewer leaves, relaunched on the next tap |
+| `VIEWPORT_W` / `VIEWPORT_H` / `JPEG_QUALITY` / `START_URL` | `1280` / `720` / `70` / Wikipedia: Moon | |
 
-Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
+The game finds the server through `RELAX_BROWSER` in `hub/public/config.js` (default `http://127.0.0.1:7860`) or `?chromium=<url>`. When it isn't running, the window shows how to start it and — on Cloudflare — a **Use Cloudflare Browser Run** button: the game Worker has Chromium built in too (Browser Run, free plan 10 browser-minutes a day). Set `RELAX_BROWSER` to `""` to always use that one.
+
+The browser core (`chromium/core.js`, `BrowserHub`) comes from [3d-browser](https://github.com/vendemiaraul-cyber/3d-browser) and is runtime-agnostic. `chromium/Dockerfile` runs the same server in a container (system Chromium, `HOST=0.0.0.0`; set `ACCESS_KEY`). When the server is reachable from other machines, private/LAN addresses are blocked unless `ALLOW_PRIVATE=1`.
 
 ## Alternative: Netlify (game) + Render (multiplayer server)
 
@@ -106,7 +115,8 @@ The server has **no required dependencies**: chat, presence, emotes and history 
 ```bash
 npm install
 npm run dev     # runs both Workers together (Browser Run needs --remote)
-npm test        # chat room, game Worker routing, Node server and Chromium tests
+npm test        # chat room, game Worker routing, Node server, video catalog and Chromium tests
+                # (the Chromium tests drive a real Chrome; they skip until `npm run local:setup`)
 ```
 
 ## Config knobs
@@ -135,7 +145,7 @@ hub/
     maps/               ArcGIS SceneView and Globe.gl pages used by Maps
 browser/                relax-browser Worker (Browser Run + Durable Object)
 server/server.js        Node multiplayer server for Render (no dependencies)
-chromium/               embedded Chromium streaming server + Dockerfile
+chromium/               local Chromium server (Puppeteer + BrowserHub core) + Dockerfile
 netlify.toml            Netlify publishes hub/public
 test/                   node:test unit tests with Workers mocks
 ```

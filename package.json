@@ -13,6 +13,9 @@
     "deploy:multiplayer": "wrangler deploy -c multiplayer/wrangler.jsonc",
     "deploy:browser": "wrangler deploy -c browser/wrangler.jsonc",
     "dev": "wrangler dev -c wrangler.jsonc -c multiplayer/wrangler.jsonc -c browser/wrangler.jsonc --remote",
+    "local:setup": "npm install --prefix chromium",
+    "local": "node chromium/server.js",
+    "local:headed": "node chromium/server.js --headed",
     "test": "node --experimental-sqlite --import ./test/register-mocks.mjs --test test/*.test.mjs"
   },
   "devDependencies": {

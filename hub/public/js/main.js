@@ -7,7 +7,7 @@ import { DRINKS, cupCanvas } from "./drinks.js";
 import { Chat, ChatView, createChatApp } from "./apps/chat.js";
 import { createYouTube, NowPlaying } from "./apps/youtube.js";
 import { createBrowser } from "./apps/browser.js";
-import { createLiveBrowser } from "./apps/browser-live.js";
+import { createLiveBrowser, browserBase } from "./apps/browser-live.js";
 import { createArcade } from "./apps/arcade.js";
 import { createMaps } from "./apps/maps.js";
 import { createPixelMe } from "./apps/pixelme.js";
@@ -64,7 +64,7 @@ const systemApp = () => {
       el("ul", { class: "svc" },
         row("Multiplayer", Net.status === "online", Net.status === "online" ? viaLabel() : Net.local?.game ? "no Service Binding yet — bind relax-multiplayer as MULTIPLAYER" : Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
-        row("Chromium", !!(window.RELAX_BROWSER || Net.local?.browser || h?.browser), pickBrowser() === "cloudflare" ? "Cloudflare Browser Run" : window.RELAX_BROWSER ? "embedded · " + window.RELAX_BROWSER.replace(/^https?:\/\//, "") : "not configured"),
+        row("Chromium", !!(browserBase() || Net.local?.browser || h?.browser), browserBase() ? "local Node · " + browserBase().replace(/^https?:\/\//, "") : Net.local?.browser || h?.browser ? "Cloudflare Browser Run" : "not configured"),
       ),
       el("p", { class: "muted", text: `You are ${profile.name}${Net.you ? " · id " + Net.you : ""} · room “${Net.room}”` }),
       el("p", { class: "muted", text: "Tip: add ?room=yourname to the URL for a private ship." }),
@@ -74,15 +74,37 @@ const systemApp = () => {
   return { el: root, onShow: render };
 };
 
-/** Chromium: Cloudflare Browser Run when the game Worker has the BROWSER_SVC binding, else the streaming server in config.js. */
+/**
+ * Chromium: the local Node server (chromium/server.js, live stream) when
+ * RELAX_BROWSER / ?chromium= points at one; it can hand over to Cloudflare
+ * Browser Run (built into the game Worker) from its help screen.
+ */
 function pickBrowser() {
-  if (Net.local?.browser) return "cloudflare";
-  return window.RELAX_BROWSER ? "live" : "cloudflare";
+  if (browserBase()) return "live";
+  return "cloudflare";
+}
+function createChromium(o) {
+  if (pickBrowser() !== "live") return createBrowser(o);
+  // the live window, able to swap itself for the Cloudflare one
+  let inner = null;
+  const shell = { el: document.createElement("div") };
+  shell.el.className = "app browser-shell";
+  const mount = (inst) => {
+    inner?.destroy?.();
+    inner = inst;
+    shell.el.replaceChildren(inst.el);
+  };
+  const cloudflare = Net.local?.browser ? () => mount(createBrowser(o)) : null;
+  mount(createLiveBrowser(o, { fallback: cloudflare }));
+  shell.onShow = () => inner?.onShow?.();
+  shell.onHide = () => inner?.onHide?.();
+  shell.destroy = () => inner?.destroy?.();
+  return shell;
 }
 
 os = new RelaxOS($("#os"), [
   { id: "tube", title: "YouTube", sub: "search + player", icon: "tube", media: true, create: () => createYouTube() },
-  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", media: true, create: (o) => (pickBrowser() === "live" ? createLiveBrowser(o) : createBrowser(o)) },
+  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", media: true, create: (o) => createChromium(o) },
   { id: "maps", title: "Maps", sub: "ArcGIS SceneView · Globe.gl", icon: "map", media: true, create: () => createMaps() },
   { id: "arcade", title: "Arcade", sub: "SuperTuxKart · Slow Roads", icon: "car", media: true, create: () => createArcade() },
   { id: "chat", title: "Chat", sub: "everyone aboard", icon: "chat", create: () => createChatApp() },

@@ -1,10 +1,19 @@
 {
   "name": "relax-hub-chromium",
   "private": true,
-  "version": "1.0.0",
-  "description": "Embedded Chromium for Relax Hub: streams a real headless Chromium over WebSocket (no npm dependencies).",
+  "version": "2.0.0",
+  "description": "Local Chromium for Relax Hub: a real Chromium driven through Puppeteer, streamed live to the game over a WebSocket.",
   "type": "module",
   "main": "server.js",
-  "engines": { "node": ">=22" },
-  "scripts": { "start": "node server.js" }
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "headed": "node server.js --headed"
+  },
+  "dependencies": {
+    "puppeteer": "^25.0.0",
+    "ws": "^8.18.0"
+  }
 }
