@@ -72,7 +72,7 @@ The **Chromium** app on the computer is a real headless Chromium running on the 
 | | |
 |---|---|
 | Render service | **relax-chromium** (Docker, `chromium/Dockerfile`, context = repo root) |
-| Also runs on | Hugging Face Spaces (Docker, port 7860), Fly.io, any Docker host |
+| Also runs on | Hugging Face Spaces (Docker, port 7860 — ready-made Space files in `huggingface/chromium/`), Fly.io, any Docker host |
 | Env vars | `MAX_SESSIONS` (default 2), `SESSION_IDLE_SECONDS` (600), `JPEG_QUALITY` (55), `ALLOWED_ORIGIN` |
 
 Each player gets their own incognito browser context; private/local addresses, `file://` and downloads are blocked, dialogs are auto-dismissed, and Chromium shuts down 60 s after the last player leaves.
