@@ -48,6 +48,10 @@ try {
 window.__relax = { game, Net, Chat }; // handy for debugging in the console
 
 // ----------------------------------------------------------------- OS ---
+const viaLabel = () =>
+  Net.via === "binding" ? `via Service Binding “${Net.health?.multiplayer}”`
+  : Net.via === "fallback" ? `via fallback server ${window.RELAX_SERVER_FALLBACK}`
+  : "connected";
 const systemApp = () => {
   const root = el("div", { class: "app system" });
   const render = () => {
@@ -57,7 +61,7 @@ const systemApp = () => {
       el("h2", { text: "RelaxOS 1.0" }),
       el("p", { text: "Booted from RELAXOS.ISO · 1.44 MB · only the necessary code." }),
       el("ul", { class: "svc" },
-        row("Multiplayer chat (Durable Object)", Net.status === "online", Net.status),
+        row("Multiplayer", Net.status === "online", Net.status === "online" ? viaLabel() : Net.local?.game ? "no Service Binding yet — bind relax-multiplayer as MULTIPLAYER" : Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
         row("Chromium", !!(window.RELAX_BROWSER || h?.browser), window.RELAX_BROWSER ? "embedded · " + window.RELAX_BROWSER.replace(/^https?:\/\//, "") : h?.browser ? "Cloudflare Browser Run" : "not configured"),
       ),
@@ -252,7 +256,7 @@ function renderNet() {
   const s = Net.status;
   const n = Net.users.size + 1;
   netPill.className = "pill net " + s;
-  netPill.textContent = s === "online" ? `● ${n} aboard` : s === "offline" ? "○ offline preview" : s === "waking" ? "◌ waking server…" : "◌ connecting…";
+  netPill.textContent = s === "online" ? `● ${n} aboard` : s === "offline" ? (Net.local?.game ? "○ single-player" : "○ offline preview") : s === "waking" ? "◌ waking server…" : "◌ connecting…";
 }
 Net.on("status", renderNet);
 Net.on("users", renderNet);

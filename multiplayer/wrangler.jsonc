@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Multiplayer Worker: chat room Durable Object + YouTube search.
+  // Bind it to the game Worker as a Service Binding named MULTIPLAYER.
+  "name": "relax-multiplayer",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-12",
+  "durable_objects": {
+    "bindings": [{ "name": "CHAT", "class_name": "ChatRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ChatRoom"] }],
+  "observability": { "enabled": true }
+  // Optional secret for YouTube search:  npx wrangler secret put YT_API_KEY
+}

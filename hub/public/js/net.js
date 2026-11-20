@@ -1,10 +1,15 @@
 // Multiplayer client: talks to the ChatRoom Durable Object over a WebSocket.
-// Falls back to an "offline preview" when the page isn't served by the hub Worker.
+// Server detection: the game's own origin first (on Cloudflare the game Worker
+// forwards to the multiplayer Worker through its Service Binding), then the
+// optional fallback server from config.js, otherwise an offline preview.
 
 const listeners = new Map();
 
-/** Where the multiplayer server lives ("" = same origin, e.g. Cloudflare Workers). Set in config.js. */
-export const SERVER = String((typeof window !== "undefined" && window.RELAX_SERVER) || "").replace(/\/+$/, "");
+const norm = (v) => String(v || "").replace(/\/+$/, "");
+const W = typeof window !== "undefined" ? window : {};
+/** Where the multiplayer server lives ("" = same origin). Detected in Net.start(). */
+export let SERVER = norm(W.RELAX_SERVER);
+const FALLBACK = norm(W.RELAX_SERVER_FALLBACK);
 export const api = (path) => SERVER + path;
 
 export const Net = {
@@ -45,23 +50,45 @@ export const Net = {
       const params = new URLSearchParams(location.search);
       if (params.get("room")) this.room = params.get("room").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 32) || "lobby";
     } catch {}
-    this.setStatus(SERVER ? "waking" : "connecting");
-    this.health = await checkHealth();
-    // A sleeping free server (Render) can take ~a minute to wake: keep trying.
-    for (let i = 0; SERVER && !this.health && i < 4; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      this.health = await checkHealth();
+    this.setStatus("connecting");
+    let h = await this.probe(SERVER);
+    this.local = SERVER ? null : h; // what the game Worker itself reports (browser binding, ...)
+    this.browserBase = h && h.browser ? SERVER : "";
+    if ((!h || !h.chat) && !SERVER && FALLBACK) {
+      // no multiplayer behind this origin → try the fallback server
+      const f = await this.probe(FALLBACK);
+      if (f && f.chat) {
+        SERVER = FALLBACK;
+        h = { ...f, browser: Boolean(this.local && this.local.browser) };
+        this.via = "fallback";
+      }
+    } else if (h && h.chat) {
+      this.via = SERVER ? "server" : h.multiplayer ? "binding" : "same-origin";
     }
-    this.emit("health", this.health);
-    if (!this.health || !this.health.chat) {
+    this.health = h;
+    this.emit("health", h);
+    if (!h || !h.chat) {
       this.setStatus("offline");
-      this.emit("system", "Offline preview — deploy the hub to Cloudflare to chat with other spacers.");
+      this.emit("system", h && h.game
+        ? "Single-player for now — no multiplayer server is bound. In Cloudflare, add a Service Binding named MULTIPLAYER to the relax-multiplayer Worker."
+        : "Offline preview — deploy the game to Cloudflare Workers to chat with other spacers.");
       return;
     }
     this.connect();
     setInterval(() => {
       if (this.ws && this.ws.readyState === 1) this.ws.send("ping");
     }, 25000);
+  },
+
+  /** Health check with patience for sleeping free servers. */
+  async probe(base) {
+    let h = await checkHealth(base);
+    for (let i = 0; base && !h && i < 3; i++) {
+      this.setStatus("waking");
+      await new Promise((r) => setTimeout(r, 3000));
+      h = await checkHealth(base);
+    }
+    return h;
   },
 
   connect() {
@@ -199,11 +226,11 @@ export const Net = {
   },
 };
 
-async function checkHealth() {
+async function checkHealth(base = "") {
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), SERVER ? 75000 : 3500);
-    const r = await fetch(api("/api/health"), { cache: "no-store", signal: ctrl.signal });
+    const t = setTimeout(() => ctrl.abort(), base ? 75000 : 5000);
+    const r = await fetch(base + "/api/health", { cache: "no-store", signal: ctrl.signal });
     clearTimeout(t);
     if (!r.ok) return null;
     const j = await r.json();

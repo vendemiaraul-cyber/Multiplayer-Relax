@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { ChatRoom } from "../hub/src/index.js";
+import { ChatRoom } from "../multiplayer/src/index.js";
 import { safeUrl } from "../browser/src/index.js";
 
 function makeCtx() {

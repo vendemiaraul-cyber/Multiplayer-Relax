@@ -8,19 +8,19 @@ other walking around, chat with speech bubbles, wave, and show off the pixel
 profile picture you drew (it's shown on your helmet visor!).
 
 ```
-┌─────────────── Browser ───────────────┐
-│ 3D ship (WebGL, no libraries)         │
-│ RelaxOS: YouTube · Browser · Arcade · │
-│          Chat · Pixel Me · System     │
-└──────────────┬────────────────────────┘
-               │ HTTPS + WebSocket
-┌──────────────▼────────────────────────┐      Service Binding (RPC)      ┌──────────────────────────────┐
-│ multiplayer-relax  Worker (hub)       │ ──────────────────────────────▶ │ relax-browser  Worker        │
-│  • static files (public/)             │   env.BROWSER_SVC.act(...)      │  • Cloudflare Browser Run    │
-│  • /api/chat → ChatRoom Durable Object│                                 │    (headless Chromium)       │
-│  • /api/yt/search → YouTube Data API  │                                 │  • BrowserSession Durable    │
-│  • /api/browser/* → BROWSER_SVC       │                                 │    Object per player         │
-└───────────────────────────────────────┘                                 └──────────────────────────────┘
+┌──────────── Browser ────────────┐
+│ 3D ship (WebGL, no libraries)   │
+│ RelaxOS: YouTube · Chromium ·   │
+│ Arcade · Chat · Pixel Me        │
+└───────────────┬─────────────────┘
+                │ HTTPS + WebSocket (same origin)
+┌───────────────▼─────────────────┐   Service Binding    ┌──────────────────────────────┐
+│ multiplayer-relax  (game Worker)│ ───── MULTIPLAYER ──▶ │ relax-multiplayer            │
+│  • static files (hub/public)    │                       │  • ChatRoom Durable Object   │
+│  • detects bindings, forwards   │                       │  • YouTube search            │
+│    /api/* to them               │ ───── BROWSER_SVC ──▶ │ relax-browser (optional)     │
+└─────────────────────────────────┘                       │  • Cloudflare Browser Run    │
+                                                          └──────────────────────────────┘
 ```
 
 ## What's inside
@@ -40,27 +40,31 @@ profile picture you drew (it's shown on your helmet visor!).
 
 > **About BeamNG:** BeamNG.drive is a paid PC/console game with no official browser version — BeamNG's own FAQ warns that apps claiming to be BeamNG on other platforms are likely malware. So Relax Hub doesn't ship a copy; the Arcade embeds legit games instead.
 
-## Deploy: Netlify (game) + Render (multiplayer server)
+## Deploy on Cloudflare Workers (Service Bindings)
 
-This is the simplest setup and is what's live right now.
-
-| Part | Where | Config |
+| Worker | Import with root directory | What it is |
 |---|---|---|
-| Game (static files in `hub/public`) | Netlify project **relax-hub-multiplayer** | `netlify.toml` |
-| Multiplayer server (`server/server.js`) | Render web service **relax-hub-multiplayer** (Frankfurt, free) | build `npm install --prefix server`, start `node server/server.js` |
+| **multiplayer-relax** | `/` (repo root, `wrangler.jsonc`) | The game. No required bindings, so it always deploys. |
+| **relax-multiplayer** | `multiplayer` | Chat room Durable Object + YouTube search |
+| **relax-browser** *(optional)* | `browser` | Cloudflare Browser Run (screenshot browser) |
 
-`hub/public/config.js` points the game at `https://relax-hub-multiplayer.onrender.com` whenever it isn't served by a Cloudflare Worker.
+1. **Game:** Workers & Pages → Create → Import a repository → this repo. Worker name `multiplayer-relax`, root directory `/`, deploy command `npx wrangler deploy`.
+2. **Multiplayer:** import the same repo again. Worker name `relax-multiplayer`, root directory `multiplayer`.
+3. **Bind them:** `multiplayer-relax` → Settings → Bindings → Add → **Service binding** → variable name **`MULTIPLAYER`**, service **`relax-multiplayer`**.
 
-The server has **no required dependencies**: chat, presence, emotes and history (last 100 messages per room, in memory) work out of the box. Optional environment variables on Render:
+The game Worker **detects the binding automatically** (it looks for `MULTIPLAYER`, `MP`, `CHAT` or `SERVER`, then any other Service Binding) and forwards `/api/chat` (WebSocket), `/api/health` and `/api/yt/search` to it. Open **System** on the in-game computer to see what was detected.
 
-| Variable | Turns on |
-|---|---|
-| `YT_API_KEY` | YouTube search in the YouTube app |
-| `CF_ACCOUNT_ID` + `CF_API_TOKEN` | The in-game Chromium, via Cloudflare Browser Run over CDP (token needs **Browser Rendering - Edit**) |
-| `ALLOWED_ORIGIN` | Lock chat to your site, e.g. `https://relax-hub-multiplayer.netlify.app` |
-| `BROWSER_IDLE_SECONDS`, `MAX_BROWSERS` | Remote browser idle timeout (default 90) and max concurrent browsers (default 3) |
+If a later Git build removes a binding you added in the dashboard, uncomment the `services` block at the bottom of `wrangler.jsonc` so the binding is part of every deploy.
 
-### Embedded Chromium (`chromium/`)
+Until a multiplayer binding exists, the game uses the fallback server in `hub/public/config.js` (`RELAX_SERVER_FALLBACK`, the Render server); set it to `""` to run single-player instead.
+
+**Your own multiplayer Worker** works too, as long as it speaks the same protocol: `GET /api/health → {"ok":true,"chat":true}` and a WebSocket at `/api/chat?room=…` with the JSON messages in `multiplayer/src/index.js` (`hello`, `chat`, `pos`, `profile`, `emote` in; `welcome`, `join`, `leave`, `chat`, `pos`, `user`, `emote`, `error` out).
+
+**YouTube search:** `npx wrangler secret put YT_API_KEY -c multiplayer/wrangler.jsonc` (pasted links and stations work without it).
+
+**Everything at once from your computer:** `npm install && npx wrangler login && npm run deploy` (multiplayer, browser, then the game).
+
+## Embedded Chromium (`chromium/`)
 
 The **Chromium** app on the computer is a real headless Chromium running on the server, streamed live into the window (JPEG screencast over a WebSocket) with your clicks, touch-drags, scrolling and typing sent back through the Chrome DevTools Protocol. No API keys and no npm packages — just `chromium/Dockerfile`:
 
@@ -76,65 +80,32 @@ Each player gets their own incognito browser context; private/local addresses, `
 
 Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
 
-## Alternative deploy: everything on Cloudflare Workers
+## Alternative: Netlify (game) + Render (multiplayer server)
 
-You need a Cloudflare account. Browser Run works on the free Workers plan (10 browser-minutes/day, 3 concurrent browsers); the paid plan gives 10 hours/month included.
+The game also runs as a plain static site; it then uses the Node server in `server/` (on Render) as its fallback multiplayer server.
 
-There are **two Workers**, both built from this one repo:
-
-| Worker | Config | What it is |
+| Part | Where | Config |
 |---|---|---|
-| `relax-browser` | `browser/wrangler.jsonc` | Chromium on Cloudflare Browser Run (only reachable through the Service Binding) |
-| `multiplayer-relax` | `wrangler.jsonc` (repo root) | The game, chat, YouTube search; binds `BROWSER_SVC` → `relax-browser` |
+| Game (static files in `hub/public`) | Netlify project **relax-hub-multiplayer** | `netlify.toml` |
+| Multiplayer server (`server/server.js`) | Render web service **relax-hub-multiplayer** (Frankfurt, free) | build `npm install --prefix server`, start `node server/server.js` |
 
-`npm run deploy` deploys `relax-browser` **first**, then `multiplayer-relax`, so the Service Binding always resolves.
+`hub/public/config.js` lists `https://relax-hub-multiplayer.onrender.com` as `RELAX_SERVER_FALLBACK`, used whenever the site itself has no multiplayer server.
 
-### Option A — Cloudflare dashboard (Workers Builds)
+The server has **no required dependencies**: chat, presence, emotes and history (last 100 messages per room, in memory) work out of the box. Optional environment variables on Render:
 
-1. Workers & Pages → **multiplayer-relax** → Settings → **Build**.
-2. Set:
-   - **Branch:** `main` (or `relax-hub` until it's merged)
-   - **Root directory:** `/` (leave empty)
-   - **Build command:** leave empty
-   - **Deploy command:** `npm run deploy`
-3. Save, then Deployments → **Retry build**.
-
-If the build log says it isn't allowed to deploy `relax-browser`, create that Worker once yourself: Create → Import a repository → this repo → Worker name **`relax-browser`**, root directory **`browser`**. Then retry the `multiplayer-relax` build.
-
-### Option B — from your computer
-
-```bash
-npm install
-npx wrangler login
-npm run deploy
-```
-
-### Option C — GitHub Actions on every push to `main`
-
-`.github/workflows/deploy.yml` is included. In the repo → Settings → Secrets and variables → Actions, add `CLOUDFLARE_API_TOKEN` (use the **“Edit Cloudflare Workers”** token template) and `CLOUDFLARE_ACCOUNT_ID`.
-
-### Service Binding (already in `wrangler.jsonc`)
-
-| Variable name | Service | Entrypoint |
-|---|---|---|
-| `BROWSER_SVC` | `relax-browser` | default |
-
-You don't need to add it in the dashboard — each deploy sets it from `wrangler.jsonc`. If you do add it by hand, use exactly these values.
-
-### Optional: YouTube search
-
-Get a free YouTube Data API v3 key and run `npx wrangler secret put YT_API_KEY` in the repo root. Without a key, pasted links and the radio stations still work.
-
-### Open it
-
-`https://multiplayer-relax.<your-subdomain>.workers.dev` — open it on two devices and say hi to yourself.
+| Variable | Turns on |
+|---|---|
+| `YT_API_KEY` | YouTube search in the YouTube app |
+| `CF_ACCOUNT_ID` + `CF_API_TOKEN` | The in-game Chromium, via Cloudflare Browser Run over CDP (token needs **Browser Rendering - Edit**) |
+| `ALLOWED_ORIGIN` | Lock chat to your site, e.g. `https://relax-hub-multiplayer.netlify.app` |
+| `BROWSER_IDLE_SECONDS`, `MAX_BROWSERS` | Remote browser idle timeout (default 90) and max concurrent browsers (default 3) |
 
 ## Local development
 
 ```bash
 npm install
 npm run dev     # runs both Workers together (Browser Run needs --remote)
-npm test        # chat room + URL-guard unit tests (no Cloudflare needed)
+npm test        # chat room, game Worker routing, Node server and Chromium tests
 ```
 
 ## Config knobs
@@ -149,9 +120,10 @@ npm test        # chat room + URL-guard unit tests (no Cloudflare needed)
 ## Project layout
 
 ```
-wrangler.jsonc          multiplayer-relax (hub) Worker config
+wrangler.jsonc          multiplayer-relax game Worker config
+multiplayer/            relax-multiplayer Worker (ChatRoom Durable Object, YouTube search)
 hub/
-  src/index.js          router, YouTube proxy, browser proxy, ChatRoom DO
+  src/index.js          game Worker: assets + Service Binding detection/forwarding
   public/               the game (static assets)
     js/engine3d.js      WebGL engine
     js/world3d.js       ship / flight / moon / spacers

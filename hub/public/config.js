@@ -1,13 +1,11 @@
-// Where Relax Hub's servers run. Values set before this file loads win.
-// - Served by the Cloudflare Worker (*.workers.dev): chat is same-origin and the
-//   browser uses Cloudflare Browser Run through the Service Binding.
-// - Served by Netlify (or anywhere else): chat on Render, embedded Chromium on Render.
+// Relax Hub server settings. Values set before this file loads win.
 (() => {
-  const onWorkers = /\.workers\.dev$/.test(location.hostname);
-  if (window.RELAX_SERVER === undefined) {
-    window.RELAX_SERVER = onWorkers ? "" : "https://relax-hub-multiplayer.onrender.com";
-  }
-  if (window.RELAX_BROWSER === undefined) {
-    window.RELAX_BROWSER = onWorkers ? "" : "https://relax-chromium.onrender.com";
-  }
+  // Multiplayer: "" = auto-detect on this site. On Cloudflare the game Worker
+  // forwards to your multiplayer Worker through its Service Binding.
+  if (window.RELAX_SERVER === undefined) window.RELAX_SERVER = "";
+  // Used only when this site has no multiplayer server bound (set "" to disable).
+  if (window.RELAX_SERVER_FALLBACK === undefined) window.RELAX_SERVER_FALLBACK = "https://relax-hub-multiplayer.onrender.com";
+  // Live embedded Chromium (chromium/ Docker server). Set "" to use the
+  // Cloudflare Browser Run Service Binding (BROWSER_SVC) instead.
+  if (window.RELAX_BROWSER === undefined) window.RELAX_BROWSER = "https://relax-chromium.onrender.com";
 })();

@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "description": "Tiny retro 3D spaceship hangout: RelaxOS computer, YouTube, Chromium via Cloudflare Browser Run, Arcade, drinks, moon trips and multiplayer chat.",
   "workspaces": [
+    "multiplayer",
     "browser"
   ],
   "scripts": {
-    "deploy": "wrangler deploy -c browser/wrangler.jsonc && wrangler deploy",
+    "deploy": "wrangler deploy -c multiplayer/wrangler.jsonc && wrangler deploy -c browser/wrangler.jsonc && wrangler deploy",
+    "deploy:game": "wrangler deploy",
+    "deploy:multiplayer": "wrangler deploy -c multiplayer/wrangler.jsonc",
     "deploy:browser": "wrangler deploy -c browser/wrangler.jsonc",
-    "deploy:hub": "wrangler deploy",
-    "dev": "wrangler dev -c wrangler.jsonc -c browser/wrangler.jsonc --remote",
+    "dev": "wrangler dev -c wrangler.jsonc -c multiplayer/wrangler.jsonc -c browser/wrangler.jsonc --remote",
     "test": "node --experimental-sqlite --import ./test/register-mocks.mjs --test test/*.test.mjs"
   },
   "devDependencies": {
