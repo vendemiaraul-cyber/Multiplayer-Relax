@@ -4,9 +4,10 @@
 //
 //   WS  /api/chat?room=lobby   ChatRoom Durable Object (one per room)
 //   GET /api/health            { ok, chat, youtube }
-//   GET /api/yt/search?q=      YouTube Data API search (optional secret YT_API_KEY)
+//   GET /api/yt/search?q=      Relax video catalog (no key), or all of YouTube with secret YT_API_KEY
 
 import { DurableObject } from "cloudflare:workers";
+import { videoSearch } from "./videosearch.js";
 
 const json = (data, init = {}) =>
   new Response(JSON.stringify(data), {
@@ -20,7 +21,7 @@ export default {
     const path = url.pathname;
 
     if (path === "/api/health" || path === "/health") {
-      return json({ ok: true, chat: true, youtube: Boolean(env.YT_API_KEY) }, { headers: { "cache-control": "no-store" } });
+      return json({ ok: true, chat: true, youtube: true, ytSource: env.YT_API_KEY ? "youtube" : "catalog" }, { headers: { "cache-control": "no-store" } });
     }
     if (path === "/api/chat") {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -30,7 +31,7 @@ export default {
       const stub = env.CHAT.get(env.CHAT.idFromName(room));
       return stub.fetch(request);
     }
-    if (path === "/api/yt/search") return ytSearch(url, env, ctx);
+    if (path === "/api/yt/search") return videoSearch(url, env, ctx);
     if (path === "/") return new Response("🚀 Relax Hub multiplayer Worker. Bind it to the game Worker with a Service Binding.\n");
     return json({ error: "not_found" }, { status: 404 });
   },
@@ -39,45 +40,6 @@ export default {
 function cleanRoom(room) {
   room = String(room || "lobby").toLowerCase();
   return /^[a-z0-9-]{1,32}$/.test(room) ? room : "lobby";
-}
-
-// ---------------------------------------------------------------- YouTube ---
-
-async function ytSearch(url, env, ctx) {
-  const q = (url.searchParams.get("q") || "").trim().slice(0, 100);
-  if (!q) return json({ items: [] });
-  if (!env.YT_API_KEY) return json({ error: "no_key", items: [] }, { status: 501 });
-
-  const cache = caches.default;
-  const cacheKey = new Request("https://relax-hub.cache/yt/" + encodeURIComponent(q.toLowerCase()));
-  const hit = await cache.match(cacheKey);
-  if (hit) return hit;
-
-  const api = new URL("https://www.googleapis.com/youtube/v3/search");
-  api.search = new URLSearchParams({
-    part: "snippet",
-    type: "video",
-    maxResults: "12",
-    videoEmbeddable: "true",
-    safeSearch: "moderate",
-    q,
-    key: env.YT_API_KEY,
-  });
-  const r = await fetch(api);
-  if (!r.ok) return json({ error: "youtube_error", status: r.status, items: [] }, { status: 502 });
-  const data = await r.json();
-  const items = (data.items || [])
-    .filter((i) => i.id && i.id.videoId)
-    .map((i) => ({
-      id: i.id.videoId,
-      title: i.snippet?.title || "",
-      channel: i.snippet?.channelTitle || "",
-      thumb: i.snippet?.thumbnails?.medium?.url || i.snippet?.thumbnails?.default?.url || "",
-      live: i.snippet?.liveBroadcastContent === "live",
-    }));
-  const res = json({ items }, { headers: { "cache-control": "public, max-age=3600" } });
-  ctx.waitUntil(cache.put(cacheKey, res.clone()));
-  return res;
 }
 
 // ------------------------------------------------------------- Chat room ---

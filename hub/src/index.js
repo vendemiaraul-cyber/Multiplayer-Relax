@@ -5,7 +5,11 @@
 //   • multiplayer: a binding named MULTIPLAYER (or MP / CHAT / SERVER, or any
 //     other Service Binding) → /api/chat, /api/health, /api/yt/search
 //   • browser:     a binding named BROWSER_SVC → /api/browser/* (Cloudflare Browser Run)
-// With no bindings at all the game still deploys and runs (single-player).
+// With no bindings at all the game still deploys and runs (single-player), and
+// /api/yt/search is answered here (Relax video catalog, or all of YouTube with
+// a YT_API_KEY secret on this Worker).
+
+import { videoSearch } from "../../multiplayer/src/videosearch.js";
 
 const json = (data, init = {}) =>
   new Response(JSON.stringify(data), {
@@ -37,7 +41,7 @@ export function findBrowser(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     if (!path.startsWith("/api/")) return env.ASSETS.fetch(request);
@@ -46,13 +50,13 @@ export default {
     const br = findBrowser(env);
 
     if (path === "/api/health") {
-      const out = { ok: true, game: true, chat: false, youtube: false, browser: Boolean(br), multiplayer: mp ? mp.name : null };
+      const out = { ok: true, game: true, chat: false, youtube: true, ytSource: env.YT_API_KEY ? "youtube" : "catalog", browser: Boolean(br), multiplayer: mp ? mp.name : null };
       if (mp) {
         try {
           const r = await mp.svc.fetch(new Request(url.origin + "/api/health", { headers: { accept: "application/json" } }));
           const h = r.ok ? await r.json() : {};
           out.chat = Boolean(h.chat);
-          out.youtube = Boolean(h.youtube);
+          if (h.ytSource) out.ytSource = h.ytSource;
         } catch (e) {
           out.error = "multiplayer binding didn't answer: " + (e && e.message ? e.message : e);
         }
@@ -66,6 +70,7 @@ export default {
 
     // everything else under /api/ (chat WebSocket, YouTube search, ...) goes to the multiplayer Worker
     if (mp) return mp.svc.fetch(request);
+    if (path === "/api/yt/search") return videoSearch(url, env, ctx);
     return json({ error: "no_multiplayer", hint: "Add a Service Binding named MULTIPLAYER to your multiplayer Worker." }, { status: 503 });
   },
 };

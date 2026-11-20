@@ -41,8 +41,12 @@ test("health + CORS", async () => {
   assert.match(pre.headers.get("access-control-allow-headers"), /x-relax-session/);
   const b = await fetch(`http://127.0.0.1:${port}/api/browser/open`, { method: "POST", headers: { "x-relax-session": "abcdefgh123" }, body: "{}" });
   assert.equal(b.status, 501);
+  // no key: the Relax catalog answers (the seed stations are always in it)
   const y = await fetch(`http://127.0.0.1:${port}/api/yt/search?q=lofi`);
-  assert.equal(y.status, 501);
+  assert.equal(y.status, 200);
+  const yj = await y.json();
+  assert.equal(yj.source, "catalog");
+  assert.ok(yj.items.some((i) => i.id === "jfKfPfyJRdk"));
 });
 
 test("multiplayer flow over real WebSockets", async () => {

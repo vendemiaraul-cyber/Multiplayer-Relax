@@ -3,13 +3,14 @@
 // this server provides:
 //   WS   /api/chat?room=lobby   multiplayer chat, presence, emotes, profiles
 //   GET  /api/health           what's available
-//   GET  /api/yt/search?q=      YouTube search (needs YT_API_KEY)
+//   GET  /api/yt/search?q=      YouTube search (Relax catalog; all of YouTube with YT_API_KEY)
 //   POST /api/browser/:action   real Chromium via Cloudflare Browser Run over CDP
 //                               (needs CF_ACCOUNT_ID + CF_API_TOKEN, optional)
 
 import http from "node:http";
 import crypto from "node:crypto";
 import { upgradeToWebSocket } from "./ws.js";
+import { createCatalog, searchVideos } from "./ytcatalog.js";
 
 const PORT = Number(process.env.PORT) || 10000;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
@@ -200,26 +201,18 @@ function room(name) {
 }
 
 // --------------------------------------------------------------- YouTube ---
+// Search: YouTube Data API when YT_API_KEY is set, else the self-filling
+// Relax catalog built from public channel feeds (server/ytcatalog.js).
+const catalog = createCatalog();
 const ytCache = new Map();
 async function ytSearch(q) {
   const key = q.toLowerCase();
   const hit = ytCache.get(key);
-  if (hit && Date.now() - hit.at < 3600_000) return hit.items;
-  const api = new URL("https://www.googleapis.com/youtube/v3/search");
-  api.search = new URLSearchParams({ part: "snippet", type: "video", maxResults: "12", videoEmbeddable: "true", safeSearch: "moderate", q, key: YT_API_KEY });
-  const r = await fetch(api);
-  if (!r.ok) throw Object.assign(new Error("youtube_error"), { status: r.status });
-  const data = await r.json();
-  const items = (data.items || []).filter((i) => i.id && i.id.videoId).map((i) => ({
-    id: i.id.videoId,
-    title: i.snippet?.title || "",
-    channel: i.snippet?.channelTitle || "",
-    thumb: i.snippet?.thumbnails?.medium?.url || i.snippet?.thumbnails?.default?.url || "",
-    live: i.snippet?.liveBroadcastContent === "live",
-  }));
-  ytCache.set(key, { at: Date.now(), items });
+  if (hit && Date.now() - hit.at < (hit.res.source === "youtube" ? 3600_000 : 600_000)) return hit.res;
+  const res = await searchVideos(q, { key: YT_API_KEY, catalog });
+  if (q !== "*") ytCache.set(key, { at: Date.now(), res });
   if (ytCache.size > 500) ytCache.delete(ytCache.keys().next().value);
-  return items;
+  return res;
 }
 
 // ------------------------------------------- Browser (Cloudflare Browser Run) ---
@@ -367,16 +360,15 @@ export const server = http.createServer(async (req, res) => {
       return res.end("🚀 Relax Hub multiplayer server is running.\n");
     }
     if (path === "/api/health") {
-      return send(res, req, 200, { ok: true, chat: true, youtube: Boolean(YT_API_KEY), browser: browserEnabled(), rooms: rooms.size }, { "cache-control": "no-store" });
+      return send(res, req, 200, { ok: true, chat: true, youtube: true, ytSource: YT_API_KEY ? "youtube" : "catalog", browser: browserEnabled(), rooms: rooms.size }, { "cache-control": "no-store" });
     }
     if (path === "/api/yt/search") {
       const q = (url.searchParams.get("q") || "").trim().slice(0, 100);
-      if (!q) return send(res, req, 200, { items: [] });
-      if (!YT_API_KEY) return send(res, req, 501, { error: "no_key", items: [] });
+      if (!q) return send(res, req, 200, { items: [], source: YT_API_KEY ? "youtube" : "catalog" });
       try {
-        return send(res, req, 200, { items: await ytSearch(q) }, { "cache-control": "public, max-age=600" });
+        return send(res, req, 200, await ytSearch(q), { "cache-control": q === "*" ? "no-store" : "public, max-age=600" });
       } catch (e) {
-        return send(res, req, 502, { error: "youtube_error", status: e.status, items: [] });
+        return send(res, req, 502, { error: "youtube_error", items: [] });
       }
     }
     if (path.startsWith("/api/browser/")) {

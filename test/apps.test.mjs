@@ -76,3 +76,11 @@ test("Maps: geocode uses ArcGIS, then falls back to OpenStreetMap", async () => 
   // nothing anywhere
   assert.equal(await geocode("zzzz", { fetchImpl: async () => json({ candidates: [] }) }), null);
 });
+
+test("YouTube search goes to a keyed server, else the game Worker, else the multiplayer server", async () => {
+  const { searchUrl } = await import("../hub/public/js/apps/youtube.js");
+  const apiFn = (p) => "https://mp.example" + p;
+  assert.equal(searchUrl("lo fi", { health: { ytSource: "youtube" }, local: { game: true } }, apiFn), "https://mp.example/api/yt/search?q=lo%20fi");
+  assert.equal(searchUrl("lofi", { health: { ytSource: "catalog" }, local: { game: true } }, apiFn), "/api/yt/search?q=lofi");
+  assert.equal(searchUrl("lofi", { health: { chat: true }, local: null }, apiFn), "https://mp.example/api/yt/search?q=lofi");
+});

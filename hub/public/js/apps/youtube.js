@@ -8,7 +8,7 @@
 // instead of an endless spinner. Music keeps playing when you minimise the
 // window or stand up from the computer.
 
-import { api } from "../net.js";
+import { api, Net } from "../net.js";
 import { el, decodeEntities, store, toast } from "../util.js";
 
 export const STATIONS = [
@@ -16,7 +16,15 @@ export const STATIONS = [
   { id: "4xDzrJKXOOY", title: "synthwave radio 🌌 beats to chill/game to", channel: "Lofi Girl" },
   { id: "rUxyKA_-grg", title: "lofi hip hop radio 💤 beats to sleep/chill to", channel: "Lofi Girl" },
 ];
-const CHIPS = ["lofi space", "rain sounds", "jazz cafe", "chiptune", "ambient sleep", "city pop"];
+const CHIPS = ["lofi", "jazz cafe", "synthwave", "sleep", "rain", "piano", "rocket launch", "🎲 surprise"];
+
+/** Where to search: a server with a YouTube API key, else the game Worker's own catalog, else the multiplayer server. */
+export function searchUrl(q, net = Net, apiFn = api) {
+  const path = "/api/yt/search?q=" + encodeURIComponent(q);
+  if (net.health && net.health.ytSource === "youtube") return apiFn(path);
+  if (net.local && net.local.game) return path;
+  return apiFn(path);
+}
 
 export const HOSTS = {
   youtube: { origin: "https://www.youtube.com", label: "youtube.com" },
@@ -244,23 +252,32 @@ export function createYouTube() {
     if (!q) return showStations();
     const id = parseYouTubeId(q);
     if (id) return play({ id, title: "YouTube video" });
+    const label = q === "*" ? "🎲 Surprise picks" : `Results for “${q}”`;
     results.replaceChildren(el("div", { class: "yt-section", text: "Searching…" }));
     try {
-      const r = await fetch(api("/api/yt/search?q=" + encodeURIComponent(q)));
+      const r = await fetch(searchUrl(q));
       const j = await r.json().catch(() => ({}));
       if (r.status === 501) {
-        showNotice("Search needs a YT_API_KEY secret on the relax-multiplayer Worker. Pasting a link or picking a station works now.");
+        showNotice("This server's search needs an update (redeploy it) — pasting a link or picking a station works now.");
         return showStations();
       }
       if (r.status === 503 || r.status === 404) {
-        showNotice("Search runs on the multiplayer Worker — bind it to the game as MULTIPLAYER. Pasting a link or picking a station works now.");
+        showNotice("Search isn't reachable on this server. Pasting a link or picking a station works now.");
         return showStations();
       }
       if (!r.ok) throw new Error(j.error || "search failed");
-      showNotice("");
+      const catalog = j.source === "catalog";
+      showNotice(j.apiError ? "YouTube API unavailable right now (quota?) — showing the Relax catalog." : "");
       const items = (j.items || []).map((i) => ({ ...i, title: decodeEntities(i.title), channel: decodeEntities(i.channel) }));
-      results.replaceChildren(el("div", { class: "yt-section", text: `Results for “${q}”` }), ...items.map(card));
-      if (!items.length) results.append(el("div", { class: "yt-section", text: "Nothing found — try another search." }));
+      results.replaceChildren(
+        el("div", { class: "yt-section", text: label + (catalog ? " · Relax catalog" : " · YouTube") }),
+        ...items.map(card),
+      );
+      if (!items.length) {
+        results.append(el("div", { class: "yt-section", text: catalog
+          ? "Nothing in the Relax catalog for that — try lofi, jazz, sleep, synthwave, space… or paste a YouTube link."
+          : "Nothing found — try another search." }));
+      }
     } catch (e) {
       showNotice("Search isn't reachable right now. Paste a YouTube link or pick a station.");
       showStations();
@@ -272,7 +289,10 @@ export function createYouTube() {
     search(input.value);
     input.blur();
   });
-  for (const c of CHIPS) chips.append(el("button", { type: "button", class: "chip", text: c, onclick: () => { input.value = c; search(c); } }));
+  for (const c of CHIPS) {
+    const q = c.startsWith("🎲") ? "*" : c;
+    chips.append(el("button", { type: "button", class: "chip", text: c, onclick: () => { input.value = q === "*" ? "" : c; search(q); } }));
+  }
   showStations();
 
   // keep playing when minimised; closing the window stops the music
