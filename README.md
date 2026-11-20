@@ -72,12 +72,12 @@ The **Chromium** app on the computer is a real headless Chromium running on the 
 | | |
 |---|---|
 | Render service | **relax-chromium** (Docker, `chromium/Dockerfile`, context = repo root) |
-| Also runs on | Hugging Face Spaces (Docker, port 7860 — ready-made Space files in `huggingface/chromium/`), Fly.io, any Docker host |
+| Also runs on | Fly.io, Koyeb, any Docker host. Hugging Face Spaces work too (ready-made files in `huggingface/chromium/`), but Docker Spaces now need a paid HF plan. |
 | Env vars | `MAX_SESSIONS` (default 2), `SESSION_IDLE_SECONDS` (600), `JPEG_QUALITY` (55), `ALLOWED_ORIGIN` |
 
 Each player gets their own incognito browser context; private/local addresses, `file://` and downloads are blocked, dialogs are auto-dismissed, and Chromium shuts down 60 s after the last player leaves.
 
-> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. For a snappy browser use Render **Starter**, or run the same Dockerfile as a free **Hugging Face Space** (2 vCPU / 16 GB).
+> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. Free alternative on Cloudflare: deploy `browser/` as **relax-browser** and add a `BROWSER_SVC` Service Binding to the game Worker — the Chromium app then uses Cloudflare Browser Run automatically (free plan: 10 browser-minutes a day).
 
 Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
 

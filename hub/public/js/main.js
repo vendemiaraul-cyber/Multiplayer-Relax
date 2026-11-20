@@ -64,7 +64,7 @@ const systemApp = () => {
       el("ul", { class: "svc" },
         row("Multiplayer", Net.status === "online", Net.status === "online" ? viaLabel() : Net.local?.game ? "no Service Binding yet — bind relax-multiplayer as MULTIPLAYER" : Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
-        row("Chromium", !!(window.RELAX_BROWSER || h?.browser), window.RELAX_BROWSER ? "embedded · " + window.RELAX_BROWSER.replace(/^https?:\/\//, "") : h?.browser ? "Cloudflare Browser Run" : "not configured"),
+        row("Chromium", !!(window.RELAX_BROWSER || Net.local?.browser || h?.browser), pickBrowser() === "cloudflare" ? "Cloudflare Browser Run" : window.RELAX_BROWSER ? "embedded · " + window.RELAX_BROWSER.replace(/^https?:\/\//, "") : "not configured"),
       ),
       el("p", { class: "muted", text: `You are ${profile.name}${Net.you ? " · id " + Net.you : ""} · room “${Net.room}”` }),
       el("p", { class: "muted", text: "Tip: add ?room=yourname to the URL for a private ship." }),
@@ -74,9 +74,15 @@ const systemApp = () => {
   return { el: root, onShow: render };
 };
 
+/** Chromium: Cloudflare Browser Run when the game Worker has the BROWSER_SVC binding, else the streaming server in config.js. */
+function pickBrowser() {
+  if (Net.local?.browser) return "cloudflare";
+  return window.RELAX_BROWSER ? "live" : "cloudflare";
+}
+
 os = new RelaxOS($("#os"), [
   { id: "tube", title: "YouTube", sub: "search + player", icon: "tube", media: true, create: () => createYouTube() },
-  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", media: true, create: (o) => (window.RELAX_BROWSER ? createLiveBrowser(o) : createBrowser(o)) },
+  { id: "browser", title: "Chromium", sub: "real browser, embedded", icon: "browser", media: true, create: (o) => (pickBrowser() === "live" ? createLiveBrowser(o) : createBrowser(o)) },
   { id: "maps", title: "Maps", sub: "ArcGIS SceneView · Globe.gl", icon: "map", media: true, create: () => createMaps() },
   { id: "arcade", title: "Arcade", sub: "SuperTuxKart · Slow Roads", icon: "car", media: true, create: () => createArcade() },
   { id: "chat", title: "Chat", sub: "everyone aboard", icon: "chat", create: () => createChatApp() },
