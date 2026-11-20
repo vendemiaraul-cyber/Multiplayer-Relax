@@ -451,3 +451,5 @@ a.btn { color: var(--cream); text-decoration: none; display: inline-flex; align-
   .lb-side { position: absolute; right: 0; top: 0; bottom: 0; z-index: 3; box-shadow: -6px 0 20px #0008; }
 }
 .browser-shell { overflow: hidden; }
+
+.arc-section { grid-column: 1 / -1; margin: 6px 2px 0; font: 11px var(--pixel); color: var(--yellow); }

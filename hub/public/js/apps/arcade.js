@@ -1,23 +1,37 @@
-// Arcade: real, high-quality games that legally run in a browser, embedded
-// from their official hosts (nothing is copied into this project).
+// Arcade: real, high-quality games that legally run in a browser, embedded from
+// their official hosts — except HexGL (MIT), which is hosted in games/hexgl/.
 
-import { Net } from "../net.js";
 import { el } from "../util.js";
 
+// Car games first, then everything else. No shooters.
 export const GAMES = [
   {
-    id: "stk",
-    name: "SuperTuxKart",
-    by: "SuperTuxKart team · web port by ading2210",
-    url: "https://supertuxkart.pages.dev/",
-    tag: "3D kart racer · PC / Mac / Linux / Android / Switch",
-    desc: "The open-source (GPL) 3D kart racer, compiled to WebAssembly. Nitro, items, dozens of tracks. Best on a computer with a keyboard; first load downloads the game data.",
-    color: "#2d6cdf",
-    license: "Open source (GPL-3.0)",
-    source: "https://github.com/ading2210/stk-code",
+    id: "hexgl",
+    cat: "car",
+    name: "HexGL",
+    by: "Thibaut Despoulain (BKcore)",
+    url: "games/hexgl/index.html",
+    tag: "Futuristic anti-gravity racer · keyboard, touch or tilt",
+    desc: "A WipEout / F-Zero tribute: scream along a neon track in a hover-ship. Arrow keys to steer and accelerate, A/D for air brakes. On phones pick “Quality: Low” and use touch controls.",
+    color: "#ff7a2f",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/BKcore/HexGL",
+  },
+  {
+    id: "polytrack",
+    cat: "car",
+    name: "PolyTrack",
+    by: "Kodub",
+    url: "https://www.kodub.com/apps/polytrack",
+    tag: "Low-poly time-trial racer · desktop & mobile",
+    desc: "Loops, jumps and drifts where every millisecond counts. Race the official tracks against ghosts, climb the online leaderboards, or build your own track in the editor.",
+    color: "#ffd166",
+    license: "Free to play (official site)",
+    source: "https://kodub.itch.io/polytrack",
   },
   {
     id: "slowroads",
+    cat: "car",
     name: "Slow Roads",
     by: "anslo",
     url: "https://slowroads.io/",
@@ -27,6 +41,71 @@ export const GAMES = [
     license: "Free to play (official site)",
     source: "https://slowroads.io/",
   },
+  {
+    id: "bruno",
+    cat: "car",
+    name: "Bruno's Toy Car",
+    by: "Bruno Simon",
+    url: "https://bruno-simon.com/",
+    tag: "Drive a toy car around a 3D playground",
+    desc: "Bruno Simon's famous interactive portfolio: a little car you drive around a physics playground, knocking over bricks and bowling pins. WASD / arrows, or the on-screen controls on a phone.",
+    color: "#e84a5f",
+    license: "Free (official site)",
+    source: "https://bruno-simon.com/",
+  },
+  {
+    id: "hextris",
+    cat: "other",
+    name: "Hextris",
+    by: "Logan Engstrom, Garrett Finucane, Noah Moroze, Michael Yang",
+    url: "https://hextris.github.io/hextris/",
+    tag: "Fast puzzle, inspired by Tetris",
+    desc: "Rotate the hexagon so falling blocks land on matching colours before they stack too high. Left/right or tap the sides of the screen.",
+    color: "#8e7cc3",
+    license: "Open source (GPL-3.0), ad-free official version",
+    source: "https://github.com/Hextris/hextris",
+  },
+  {
+    id: "2048",
+    cat: "other",
+    name: "2048",
+    by: "Gabriele Cirulli",
+    url: "https://play2048.co/",
+    tag: "Slide-and-merge number puzzle",
+    desc: "Slide tiles to merge equal numbers and reach the 2048 tile. Arrow keys or swipe.",
+    color: "#edc22e",
+    license: "Free (official site)",
+    source: "https://github.com/gabrielecirulli/2048",
+  },
+  {
+    id: "adarkroom",
+    cat: "other",
+    name: "A Dark Room",
+    by: "Doublespeak Games",
+    url: "https://adarkroom.doublespeakgames.com/",
+    tag: "Minimalist text adventure",
+    desc: "It starts with a cold, dark room and a fire to light. A slow-burning mystery that grows into something much bigger. Perfect for a quiet evening in the ship.",
+    color: "#6b6b6b",
+    license: "Open source (MPL-2.0), official site",
+    source: "https://github.com/doublespeakgames/adarkroom",
+  },
+  {
+    id: "littlealchemy",
+    cat: "other",
+    name: "Little Alchemy 2",
+    by: "Recloak",
+    url: "https://littlealchemy2.com/",
+    tag: "Combine elements, discover the universe",
+    desc: "Start with air, earth, fire and water and mix your way to dinosaurs, spaceships and the Moon. Relaxed, no timers.",
+    color: "#4aa3df",
+    license: "Free (official site)",
+    source: "https://littlealchemy2.com/",
+  },
+];
+
+const SECTIONS = [
+  ["car", "🏎 Car games"],
+  ["other", "🎮 More games"],
 ];
 
 export function createArcade() {
@@ -35,10 +114,13 @@ export function createArcade() {
   const stage = el("div", { class: "arc-stage hidden" });
   root.append(list, stage);
 
-  const preview = () => !Net.health;
+  for (const [cat, title] of SECTIONS) {
+    list.append(el("h3", { class: "arc-section", text: title }));
+    for (const gm of GAMES.filter((g) => g.cat === cat)) list.append(card(gm));
+  }
 
-  for (const gm of GAMES) {
-    const card = el("article", { class: "arc-card" },
+  function card(gm) {
+    return el("article", { class: "arc-card" },
       el("div", { class: "arc-banner", style: `--c:${gm.color}` }, el("span", { text: gm.name })),
       el("div", { class: "arc-body" },
         el("div", { class: "arc-tag", text: gm.tag }),
@@ -51,7 +133,6 @@ export function createArcade() {
         ),
       ),
     );
-    list.append(card);
   }
 
   function play(gm) {
@@ -59,7 +140,8 @@ export function createArcade() {
     stage.classList.remove("hidden");
     const back = el("button", { type: "button", class: "btn small", text: "◀ Arcade", onclick: stop });
     const full = el("a", { class: "btn small", href: gm.url, target: "_blank", rel: "noopener", text: "Full screen ↗" });
-    const note = el("span", { class: "muted arc-note", text: preview() ? "Preview mode can't load other sites — open it full screen." : "Blank or blocked? Use Full screen." });
+    const local = !/^https?:/i.test(gm.url);
+    const note = el("span", { class: "muted arc-note", text: local ? "Click the game once, then use the keyboard." : "Blank or blocked? Use Full screen." });
     const frame = el("iframe", {
       src: gm.url,
       title: gm.name,
