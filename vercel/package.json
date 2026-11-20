@@ -1,0 +1,14 @@
+{
+  "name": "relax-chromium",
+  "private": true,
+  "type": "module",
+  "description": "Relax Hub Chromium launcher: wakes a Vercel Sandbox running Chrome and hands the game its address.",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@vercel/oidc": "3.2.0",
+    "@vercel/sandbox": "3.9.1"
+  },
+  "comment": "@vercel/sandbox is pinned to 3.9.1: 4.x pulls in @vercel/drives, whose CommonJS build require()s an ESM-only package and crashes on Vercel's function runtime."
+}

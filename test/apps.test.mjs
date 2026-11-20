@@ -84,3 +84,21 @@ test("YouTube search goes to a keyed server, else the game Worker, else the mult
   assert.equal(searchUrl("lofi", { health: { ytSource: "catalog" }, local: { game: true } }, apiFn), "/api/yt/search?q=lofi");
   assert.equal(searchUrl("lofi", { health: { chat: true }, local: null }, apiFn), "https://mp.example/api/yt/search?q=lofi");
 });
+
+test("Chromium: fixed server vs launcher (old sandbox addresses are dropped)", async () => {
+  const { browserBase, launcherUrl } = await import("../hub/public/js/apps/browser-live.js");
+  const mem = () => { const m = new Map(); return { get: (k) => m.get(k) ?? null, set: (k, v) => (v === null ? m.delete(k) : m.set(k, v)) }; };
+  let st = mem();
+  assert.equal(browserBase("", st, ""), "");
+  assert.equal(browserBase("?chromium=http://127.0.0.1:7860/", st, ""), "http://127.0.0.1:7860");
+  assert.equal(browserBase("", st, ""), "http://127.0.0.1:7860", "remembered");
+  assert.equal(browserBase("?chromium=default", st, ""), "");
+  st = mem();
+  st.set("chromiumBase", "https://sb-abc.vercel.run");
+  assert.equal(browserBase("", st, ""), "", "old sandbox address forgotten");
+  assert.equal(st.get("chromiumBase"), null);
+  assert.equal(browserBase("?chromium=https://sb-x.vercel.run", st, ""), "");
+  assert.equal(launcherUrl("https://relax-chromium.vercel.app/api/start"), "https://relax-chromium.vercel.app/api/start");
+  assert.equal(launcherUrl(""), "");
+  assert.equal(launcherUrl("javascript:alert(1)"), "");
+});

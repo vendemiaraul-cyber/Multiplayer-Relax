@@ -21,12 +21,27 @@ const VIEWPORTS = { fit: "Fit window", "1280x720": "Desktop 1280×720", "1024x76
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-/** Server address: ?chromium=URL (remembered), else RELAX_BROWSER from config.js. */
+/**
+ * A fixed server address: ?chromium=URL (remembered; ?chromium=default forgets
+ * it), else RELAX_BROWSER from config.js. Empty when the game should ask the
+ * launcher instead. Old remembered sandbox addresses (*.vercel.run) are dropped:
+ * the launcher hands those out and keeps them alive.
+ */
 export function browserBase(search = typeof location !== "undefined" ? location.search : "", st = store, cfg = typeof window !== "undefined" ? window.RELAX_BROWSER : "") {
   const q = new URLSearchParams(search).get("chromium");
-  if (q && /^https?:\/\//i.test(q)) st.set("chromiumBase", q);
+  if (q && /^https?:\/\//i.test(q) && !/\.vercel\.run\b/i.test(q)) st.set("chromiumBase", q);
   else if (q === "default") st.set("chromiumBase", null);
-  return String(st.get("chromiumBase") || cfg || "").replace(/\/+$/, "");
+  let saved = st.get("chromiumBase") || "";
+  if (/\.vercel\.run\b/i.test(saved)) {
+    st.set("chromiumBase", null);
+    saved = "";
+  }
+  return String(saved || cfg || "").replace(/\/+$/, "");
+}
+
+/** The Chromium launcher (a Vercel Function that wakes the sandbox): RELAX_BROWSER_LAUNCHER in config.js. */
+export function launcherUrl(cfg = typeof window !== "undefined" ? window.RELAX_BROWSER_LAUNCHER : "") {
+  return /^https?:\/\//i.test(String(cfg || "")) ? String(cfg) : "";
 }
 
 /** Access key: ?bkey=… (remembered) or the one typed into the prompt. */
@@ -75,7 +90,9 @@ export function fitViewport(boxW, boxH) {
 }
 
 export function createLiveBrowser(os, { fallback = null } = {}) {
-  const BASE = browserBase();
+  let BASE = browserBase();
+  const LAUNCHER = BASE ? "" : launcherUrl();
+  let needLaunch = Boolean(LAUNCHER), heartbeatT = null;
   const SID = sessionId();
   let KEY = accessKey();
 
@@ -138,8 +155,8 @@ export function createLiveBrowser(os, { fallback = null } = {}) {
     el("label", { class: "lb-row" }, el("span", { text: "Max pages" }), maxPages),
     crawlBtn, crawlTxt,
     el("div", { class: "lb-sep", text: "Session" }),
-    el("p", { class: "muted lb-small", text: `Server ${BASE || "—"} · session ${SID.slice(0, 8)}` }),
-    btn("🔑 Change key", "Change the access key", () => askKey(), "btn small"),
+    el("p", { class: "muted lb-small", text: `${LAUNCHER ? "Cloud Chromium (Vercel Sandbox, starts by itself)" : "Server " + (BASE || "—")} · session ${SID.slice(0, 8)}` }),
+    LAUNCHER ? null : btn("🔑 Change key", "Change the access key", () => askKey(), "btn small"),
   );
   let sideOpen = Boolean(store.get("chromiumSide"));
   function setSide(on) {
@@ -204,8 +221,47 @@ export function createLiveBrowser(os, { fallback = null } = {}) {
   }
 
   // ---- connection ----
-  function connect() {
+  /** Ask the launcher to wake Chromium → { ok, url, key, error } */
+  async function launch() {
+    try {
+      const r = await fetch(LAUNCHER, { cache: "no-store", signal: AbortSignal.timeout(115000) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok && j.ok && j.url ? j : { ok: false, error: j.error || `launcher answered ${r.status}` };
+    } catch (e) {
+      return { ok: false, error: e && e.name === "TimeoutError" ? "the launcher took too long" : "the launcher isn't reachable" };
+    }
+  }
+  // while connected, tell the launcher every 4 minutes that Chromium is in use (else the sandbox sleeps after ~10 min)
+  function startHeartbeat() {
+    clearInterval(heartbeatT);
+    if (!LAUNCHER) return;
+    heartbeatT = setInterval(async () => {
+      if (!ws || ws.readyState !== 1) return;
+      const r = await launch();
+      if (r.ok && r.url && r.url !== BASE) { BASE = r.url; KEY = r.key || KEY; }
+    }, 4 * 60 * 1000);
+  }
+
+  async function connect() {
     if (destroyed) return;
+    clearTimeout(reconnectT);
+    if (LAUNCHER && needLaunch) {
+      setChip("wait", "○ waking");
+      if (!hasFrame) showOverlay(...spinner("Waking up Chromium…"));
+      const r = await launch();
+      if (destroyed) return;
+      if (!r.ok) {
+        setChip("bad", "● asleep");
+        showOverlay(el("div", { class: "lb-help" },
+          el("h2", { text: "Chromium didn't wake up" }),
+          el("p", { text: "The cloud Chromium couldn't start: " + r.error + ". Trying again by itself…" }),
+          el("div", { class: "lb-actions" }, btn("↻ Retry now", "Retry", () => { retry = 0; reconnect(0); }, "btn small"))));
+        return reconnect();
+      }
+      BASE = r.url.replace(/\/+$/, "");
+      KEY = r.key || "";
+      needLaunch = false;
+    }
     if (!BASE) {
       setChip("bad", "● not configured");
       return showOverlay(el("div", { class: "lb-help" }, el("h2", { text: "No Chromium server set" }), el("p", { text: "Set RELAX_BROWSER in config.js (e.g. http://127.0.0.1:7860) or open the game with ?chromium=http://127.0.0.1:7860" })));
@@ -226,6 +282,7 @@ export function createLiveBrowser(os, { fallback = null } = {}) {
       everOpened = true;
       retry = 0;
       setChip("ok", "● live");
+      startHeartbeat();
     };
     sock.onmessage = (e) => {
       if (ws !== sock) return;
@@ -240,12 +297,14 @@ export function createLiveBrowser(os, { fallback = null } = {}) {
       for (const r of pending.values()) r({ error: "disconnected" });
       pending.clear();
       if (destroyed) return;
-      if (e.code === 4401) {
+      clearInterval(heartbeatT);
+      if (LAUNCHER) needLaunch = true; // the sandbox may have gone to sleep: ask the launcher again
+      if (e.code === 4401 && !LAUNCHER) {
         setChip("bad", "● key needed");
         return askKey(Boolean(KEY));
       }
       setChip("bad", e.code === 4429 ? "● busy" : "● offline");
-      if (!everOpened) offlineHelp();
+      if (!everOpened && !LAUNCHER) offlineHelp();
       else if (!hasFrame) showOverlay(...spinner("Reconnecting…"));
       else statusText.textContent = "Reconnecting…";
       reconnect();
@@ -528,6 +587,7 @@ export function createLiveBrowser(os, { fallback = null } = {}) {
     destroy() {
       destroyed = true;
       clearTimeout(reconnectT);
+      clearInterval(heartbeatT);
       ro.disconnect();
       const s = ws;
       ws = null;

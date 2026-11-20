@@ -7,7 +7,7 @@ import { DRINKS, cupCanvas } from "./drinks.js";
 import { Chat, ChatView, createChatApp } from "./apps/chat.js";
 import { createYouTube, NowPlaying } from "./apps/youtube.js";
 import { createBrowser } from "./apps/browser.js";
-import { createLiveBrowser, browserBase } from "./apps/browser-live.js";
+import { createLiveBrowser, browserBase, launcherUrl } from "./apps/browser-live.js";
 import { createArcade } from "./apps/arcade.js";
 import { createMaps } from "./apps/maps.js";
 import { createPixelMe } from "./apps/pixelme.js";
@@ -64,7 +64,7 @@ const systemApp = () => {
       el("ul", { class: "svc" },
         row("Multiplayer", Net.status === "online", Net.status === "online" ? viaLabel() : Net.local?.game ? "no Service Binding yet — bind relax-multiplayer as MULTIPLAYER" : Net.status),
         row("YouTube search", !!h?.youtube, h?.youtube ? "API key set" : h ? "add YT_API_KEY secret — links & stations still work" : "deploy to enable"),
-        row("Chromium", !!(browserBase() || Net.local?.browser || h?.browser), browserBase() ? "local Node · " + browserBase().replace(/^https?:\/\//, "") : Net.local?.browser || h?.browser ? "Cloudflare Browser Run" : "not configured"),
+        row("Chromium", !!(browserBase() || launcherUrl() || Net.local?.browser || h?.browser), browserBase() ? "local Node · " + browserBase().replace(/^https?:\/\//, "") : launcherUrl() ? "cloud · Vercel Sandbox (starts by itself)" : Net.local?.browser || h?.browser ? "Cloudflare Browser Run" : "not configured"),
       ),
       el("p", { class: "muted", text: `You are ${profile.name}${Net.you ? " · id " + Net.you : ""} · room “${Net.room}”` }),
       el("p", { class: "muted", text: "Tip: add ?room=yourname to the URL for a private ship." }),
@@ -80,7 +80,7 @@ const systemApp = () => {
  * Browser Run (built into the game Worker) from its help screen.
  */
 function pickBrowser() {
-  if (browserBase()) return "live";
+  if (browserBase() || launcherUrl()) return "live";
   return "cloudflare";
 }
 function createChromium(o) {

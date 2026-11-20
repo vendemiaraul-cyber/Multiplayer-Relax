@@ -65,7 +65,19 @@ Until a multiplayer binding exists, the game uses the fallback server in `hub/pu
 
 **Everything at once from your computer:** `npm install && npx wrangler login && npm run deploy` (multiplayer, browser, then the game).
 
-## Chromium (`chromium/`) — local Node
+## Chromium in the cloud (`vercel/`) — default
+
+The **Chromium** app streams a real Google Chrome that runs in a **Vercel Sandbox** (a persistent micro-VM in Frankfurt, project `relax-chromium`). It works on phones with nothing to install:
+
+1. The game calls `https://relax-chromium.vercel.app/api/start` (`vercel/api/start.js`, a Vercel Function).
+2. The function wakes the sandbox (`Sandbox.get({ name: "relax-chromium", resume: true })`), starts `chromium/server.js` in it if it isn't running, and answers `{ ok, url, key }`. A cold start takes about 3 s; Chrome, the repo and `node_modules` live in the sandbox's snapshot (the function reinstalls them if the snapshot ever expires).
+3. The game streams Chromium from `wss://<url>/api/ws` and calls `/api/start` every 4 minutes as a heartbeat. Without heartbeats the sandbox stops ~10 minutes after the last use (Hobby caps one sandbox session at 45 minutes; after that the next call starts a fresh one and the window reconnects by itself).
+
+The function authenticates to the Sandbox API with its own OIDC token — no Vercel token is stored. Project env vars: `SANDBOX_NAME`, `SANDBOX_TEAM_ID`, `SANDBOX_PROJECT_ID`, `CHROMIUM_KEY` (the server's access key, handed to the game) and `ALLOWED_ORIGINS` (game origins allowed to call the launcher; `*` = any). `@vercel/sandbox` is pinned to 3.9.1 because 4.x crashes on Vercel's function runtime (`ERR_REQUIRE_ESM` from `@vercel/drives`). The `relax-chromium` project isn't connected to Git: redeploy `vercel/` after changing it.
+
+Config: `RELAX_BROWSER_LAUNCHER` in `hub/public/config.js` (set `""` to turn the cloud Chromium off). A fixed server — `RELAX_BROWSER` or `?chromium=<url>` — wins over the launcher.
+
+## Chromium on your own computer (`chromium/`) — local Node
 
 The **Chromium** app on the computer is a real Chromium driven over the Chrome DevTools Protocol through Puppeteer, running on **your own computer**, streamed live into the window (CDP screencast → JPEG frames over one WebSocket). Taps and drags become real touch events (native scrolling with momentum, pinch), the mouse wheel scrolls, and the keyboard or the type box types — key combos like Ctrl+A included. It has tabs (popups open as new tabs), back/forward/reload, an address bar that searches DuckDuckGo for plain words, a "Fit window / Desktop / Tablet / Phone" screen size and **auto-browse** (follows random links on its own).
 
@@ -86,7 +98,7 @@ Open the game in a browser on the same computer, sit at the desk, start **Chromi
 | `MAX_SESSIONS` / `IDLE_SECONDS` | `2` / `120` | one Chromium per session; closed 120 s after its last viewer leaves, relaunched on the next tap |
 | `VIEWPORT_W` / `VIEWPORT_H` / `JPEG_QUALITY` / `START_URL` | `1280` / `720` / `70` / Wikipedia: Moon | |
 
-The game finds the server through `RELAX_BROWSER` in `hub/public/config.js` (default `http://127.0.0.1:7860`) or `?chromium=<url>`. When it isn't running, the window shows how to start it and — on Cloudflare — a **Use Cloudflare Browser Run** button: the game Worker has Chromium built in too (Browser Run, free plan 10 browser-minutes a day). Set `RELAX_BROWSER` to `""` to always use that one.
+To use it, set `RELAX_BROWSER` in `hub/public/config.js` to `http://127.0.0.1:7860` or open the game with `?chromium=http://127.0.0.1:7860` (remembered; `?chromium=default` goes back to the cloud). When it isn't running, the window shows how to start it and — on Cloudflare — a **Use Cloudflare Browser Run** button (the game Worker has Chromium built in too; free plan 10 browser-minutes a day).
 
 The browser core (`chromium/core.js`, `BrowserHub`) comes from [3d-browser](https://github.com/vendemiaraul-cyber/3d-browser) and is runtime-agnostic. `chromium/Dockerfile` runs the same server in a container (system Chromium, `HOST=0.0.0.0`; set `ACCESS_KEY`). When the server is reachable from other machines, private/LAN addresses are blocked unless `ALLOW_PRIVATE=1`.
 
@@ -145,7 +157,8 @@ hub/
     maps/               ArcGIS SceneView and Globe.gl pages used by Maps
 browser/                relax-browser Worker (Browser Run + Durable Object)
 server/server.js        Node multiplayer server for Render (no dependencies)
-chromium/               local Chromium server (Puppeteer + BrowserHub core) + Dockerfile
+chromium/               Chromium server (Puppeteer + BrowserHub core) + Dockerfile
+vercel/                 Chromium launcher: Vercel Function that wakes the Vercel Sandbox
 netlify.toml            Netlify publishes hub/public
 test/                   node:test unit tests with Workers mocks
 ```
