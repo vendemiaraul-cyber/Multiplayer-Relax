@@ -77,7 +77,7 @@ The **Chromium** app on the computer is a real headless Chromium running on the 
 
 Each player gets their own incognito browser context; private/local addresses, `file://` and downloads are blocked, dialogs are auto-dismissed, and Chromium shuts down 60 s after the last player leaves.
 
-> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. Free alternative on Cloudflare: deploy `browser/` as **relax-browser** and add a `BROWSER_SVC` Service Binding to the game Worker — the Chromium app then uses Cloudflare Browser Run automatically (free plan: 10 browser-minutes a day).
+> Render's free instances have very little CPU (0.1 vCPU / 512 MB), so pages load slowly there. On Cloudflare you need none of this: the game Worker has Chromium built in (Cloudflare Browser Run, free plan: 10 browser-minutes a day) and the Chromium app uses it automatically. `browser/` can still be deployed as a separate **relax-browser** Worker behind a `BROWSER_SVC` Service Binding if you prefer.
 
 Render's free plan sleeps after a while without visitors; the first player then waits ~30-60 s while it wakes (the game shows “waking server…”).
 

@@ -1,23 +1,34 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Game Worker: serves the game. No required bindings, so importing this repo
-  // into Cloudflare (root directory "/") always deploys.
+  // Game Worker: serves the game, answers YouTube search and runs the in-game
+  // Chromium on Cloudflare Browser Run (free plan: 10 browser-minutes a day).
+  // Importing this repo into Cloudflare (root directory "/") deploys all of it.
   "name": "multiplayer-relax",
   "main": "hub/src/index.js",
   "compatibility_date": "2026-11-12",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./hub/public",
     "binding": "ASSETS"
   },
+  // Built-in Chromium: Browser Run + one Durable Object per player's tab
+  "browser": { "binding": "BROWSER" },
+  "durable_objects": {
+    "bindings": [{ "name": "BROWSER_SESSION", "class_name": "BrowserSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BrowserSession"] }],
+  "vars": {
+    // Close a player's remote browser after this many idle seconds (saves browser minutes)
+    "BROWSER_IDLE_SECONDS": "90"
+  },
   "observability": { "enabled": true }
 
-  // Multiplayer + browser come from other Workers through Service Bindings and
-  // are detected automatically. Add them in the dashboard
-  // (Settings → Bindings → Add → Service binding), or here so they survive
-  // every Git build (the target Workers must already exist):
+  // Multiplayer comes from another Worker through a Service Binding and is
+  // detected automatically. Add it in the dashboard
+  // (Settings → Bindings → Add → Service binding), or here so it survives
+  // every Git build (the target Worker must already exist):
   //
   // , "services": [
-  //   { "binding": "MULTIPLAYER", "service": "relax-multiplayer" },
-  //   { "binding": "BROWSER_SVC", "service": "relax-browser" }
+  //   { "binding": "MULTIPLAYER", "service": "relax-multiplayer" }
   // ]
 }

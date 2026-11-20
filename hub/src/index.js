@@ -4,12 +4,16 @@
 // detects automatically:
 //   • multiplayer: a binding named MULTIPLAYER (or MP / CHAT / SERVER, or any
 //     other Service Binding) → /api/chat, /api/health, /api/yt/search
-//   • browser:     a binding named BROWSER_SVC → /api/browser/* (Cloudflare Browser Run)
+//   • browser:     built in (BROWSER + BROWSER_SESSION in wrangler.jsonc), or a
+//                  binding named BROWSER_SVC → /api/browser/* (Cloudflare Browser Run)
 // With no bindings at all the game still deploys and runs (single-player), and
 // /api/yt/search is answered here (Relax video catalog, or all of YouTube with
 // a YT_API_KEY secret on this Worker).
 
 import { videoSearch } from "../../multiplayer/src/videosearch.js";
+
+// Built-in Chromium (Cloudflare Browser Run): the per-player tab Durable Object.
+export { BrowserSession } from "../../browser/src/index.js";
 
 const json = (data, init = {}) =>
   new Response(JSON.stringify(data), {
@@ -37,6 +41,19 @@ export function findMultiplayer(env) {
 }
 export function findBrowser(env) {
   for (const name of BROWSER_NAMES) if (env[name]) return { name, svc: env[name] };
+  // built into this Worker: Browser Run binding + BrowserSession Durable Object
+  const ns = env.BROWSER_SESSION;
+  if (env.BROWSER && ns && typeof ns.idFromName === "function") {
+    return {
+      name: "built-in",
+      svc: {
+        act(sid, action, params) {
+          if (typeof sid !== "string" || !SESSION_RE.test(sid)) throw new Error("bad session id");
+          return ns.get(ns.idFromName(sid)).act(String(action), params && typeof params === "object" ? params : {});
+        },
+      },
+    };
+  }
   return null;
 }
 

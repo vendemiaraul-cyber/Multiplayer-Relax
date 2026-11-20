@@ -52,3 +52,23 @@ test("BROWSER_SVC binding powers /api/browser via RPC", async () => {
   assert.deepEqual(calls[0], ["abcdef123456", "open", "https://x.test"]);
   assert.equal((await call(env, "/api/browser/nope", { method: "POST", headers: { "x-relax-session": "abcdef123456" } })).status, 400);
 });
+
+test("built-in Chromium: BROWSER + BROWSER_SESSION in the game Worker", async () => {
+  const { findBrowser } = await import("../hub/src/index.js");
+  const acted = [];
+  const ns = {
+    idFromName: (n) => "id:" + n,
+    get: (id) => ({ act: async (action, params) => (acted.push([id, action, params]), { url: "https://example.com/", title: "Ex" }) }),
+  };
+  const env = { ASSETS, BROWSER: { fetch() {} }, BROWSER_SESSION: ns };
+  assert.equal(findBrowser(env).name, "built-in");
+  assert.equal(findMultiplayer(env), null, "browser bindings are never taken for multiplayer");
+  const h = await (await call(env, "/api/health")).json();
+  assert.equal(h.browser, true);
+  const r = await call(env, "/api/browser/open", { method: "POST", headers: { "x-relax-session": "abcdefgh1234" }, body: JSON.stringify({ url: "https://example.com" }) });
+  assert.deepEqual(await r.json(), { url: "https://example.com/", title: "Ex" });
+  assert.deepEqual(acted[0], ["id:abcdefgh1234", "open", { url: "https://example.com" }]);
+  assert.throws(() => findBrowser(env).svc.act("bad id!", "open", {}), /bad session/);
+  // an explicit BROWSER_SVC service binding still wins
+  assert.equal(findBrowser({ ...env, BROWSER_SVC: { act() {} } }).name, "BROWSER_SVC");
+});
