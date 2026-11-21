@@ -1,6 +1,6 @@
 // Arcade: real, high-quality games that legally run in a browser, embedded from
 // their official hosts, or hosted in hub/public/games/ when the licence allows
-// (HexGL, Javascript Racer, 2048, Hextris). Sites that forbid embedding open in a new tab.
+// (HexGL, Javascript Racer, Beach Road, Toy Car, 2048, Hextris). Sites that forbid embedding open in a new tab.
 
 import { el } from "../util.js";
 
@@ -41,6 +41,54 @@ export const GAMES = [
     color: "#3fbf7f",
     license: "Free to play (official site)",
     source: "https://slowroads.io/",
+  },
+  {
+    id: "beachroad",
+    cat: "car",
+    name: "Beach Road",
+    by: "Achal Agrawal",
+    url: "games/beachroad/index.html",
+    tag: "Zen coastal drive · autodrive & generative radio",
+    desc: "An endless drive along palm beaches, clifftops, pine coast and harbour villages. Steer yourself, set cruise control, or press E for autodrive and just watch the coast go by, with a radio that never loops.",
+    color: "#f2a65a",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/achalagrawal/beach-road",
+  },
+  {
+    id: "longdrive",
+    cat: "car",
+    name: "Long Drive",
+    by: "Shubham",
+    url: "https://shubham8111.github.io/long-drive/",
+    tag: "Calm endless drive through real places",
+    desc: "No score, no timer, nothing to win: an endless drive built from open map data, with weather that drifts from clear to rain or snow, a radio and an announcer who talks about what you pass.",
+    color: "#7fb3d5",
+    license: "Free (the author's own site)",
+    source: "https://github.com/shubham8111/long-drive",
+  },
+  {
+    id: "horizondrift",
+    cat: "car",
+    name: "Horizon Drift",
+    by: "Sumit Kumar Ta",
+    url: "https://sk090347.github.io/horizon-drift/",
+    tag: "Endless open-world drive · no fail state",
+    desc: "Cruise a procedural open world forever, through day, night and rain. Drift if you like or just roll along. WASD to drive, C for camera, N to skip the time of day.",
+    color: "#c27ba0",
+    license: "Open source (MIT / Apache-2.0), the author's own site",
+    source: "https://github.com/SK090347/horizon-drift",
+  },
+  {
+    id: "toycar",
+    cat: "car",
+    name: "Toy Car",
+    by: "Bruno Simon",
+    url: "games/toycar/index.html",
+    tag: "Drive a little car around a 3D playground · keyboard or touch",
+    desc: "Bruno Simon's famous 2019 portfolio: knock over bricks and bowling pins, hit jumps and explore the island. Arrow keys / WASD, Shift to boost, or the on-screen pad on a phone.",
+    color: "#ff8908",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/brunosimon/folio-2019",
   },
   {
     id: "polytrack",

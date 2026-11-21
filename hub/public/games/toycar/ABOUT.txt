@@ -1,0 +1,2 @@
+Bruno Simon's folio-2019 (MIT) — https://github.com/brunosimon/folio-2019
+Converted to plain ES modules by scripts/vendor-toycar.mjs (no bundler). Libraries load from jsDelivr/esm.sh.
