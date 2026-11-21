@@ -35,7 +35,7 @@ profile picture you drew (it's shown on your helmet visor!).
 | **YouTube** | The official embed player (needs no server or key) + search via the multiplayer Worker (`/api/yt/search`, cached 1 h). Paste any link, or use the built-in Lofi Girl stations. The official IFrame Player API attaches to the embed, so real errors (embedding disabled, missing referrer “Error 153”, …) are shown instead of an endless spinner, with **Reload**, **⇄ switch between youtube.com and youtube-nocookie.com** and **Open on YouTube**. |
 | **Maps** | Opens with a choice of 3D engine: **ArcGIS SceneView** (Esri's ArcGIS Maps SDK for JavaScript 5.1 — satellite imagery on world elevation, tilt into the terrain; no key needed) or **Globe.gl** (light three.js globe with blue-marble/night textures and a tiny Relax Hub ship in orbit). Place search (ArcGIS World Geocoder, falling back to OpenStreetMap Nominatim), “lat, lng” input, and quick trips to Everest, the Grand Canyon, the Matterhorn and more. Each engine runs in its own page (`hub/public/maps/`), so it also works full screen. |
 | **Browser** | A *real* Chromium running on **Cloudflare Browser Run**. The `relax-browser` Worker keeps one tab per player in a Durable Object and streams JPEG frames; your taps, scrolls and typing are replayed with Puppeteer. Includes a “Live View” pop-out (Cloudflare's hosted interactive view of the same tab). Private/local addresses are blocked. |
-| **Arcade** | Car games first: **HexGL** (futuristic anti-gravity racer, MIT — hosted in `hub/public/games/hexgl/`), **PolyTrack** (Kodub), **Slow Roads** (anslo) and **Bruno's Toy Car** (Bruno Simon). Then **Hextris**, **2048**, **A Dark Room** and **Little Alchemy 2**. Everything except HexGL is embedded from its official site (Full screen ↗ if a site refuses to be embedded). |
+| **Arcade** | Car games first: **HexGL** (anti-gravity racer) and **Javascript Racer** (retro OutRun-style, touch pedals on phones) — both hosted in `hub/public/games/` — then **Slow Roads** (embedded) and **PolyTrack** (opens on kodub.com: Kodub forbids embedding). Below: **Hextris** and **2048** (hosted, ad-free), **A Dark Room** and **Little Alchemy 2** (embedded). |
 | **Multiplayer chat** | One `ChatRoom` Durable Object per room (WebSocket Hibernation, SQLite history of the last 100 messages). Positions, drinks, scenes, emotes and profile updates are synced. Add `?room=anything` to the URL for a private ship. |
 | **Pixel Me** | 16×16 pfp editor (pen, fill, erase, picker, undo, random), name + suit colour. Stored in your browser and shared with everyone. |
 
@@ -166,7 +166,10 @@ test/                   node:test unit tests with Workers mocks
 ## Credits
 
 - HexGL © Thibaut Despoulain, MIT — [BKcore/HexGL](https://github.com/BKcore/HexGL) (copy in `hub/public/games/hexgl/`, analytics removed)
-- PolyTrack © Kodub · Bruno Simon's portfolio © Bruno Simon · Hextris (GPL-3.0) © Logan Engstrom et al. · 2048 © Gabriele Cirulli · A Dark Room (MPL-2.0) © Doublespeak Games · Little Alchemy 2 © Recloak — all embedded from their official sites
+- Javascript Racer © Jake Gordon, MIT — [jakesgordon/javascript-racer](https://github.com/jakesgordon/javascript-racer) (copy in `games/racer/`, touch pedals added)
+- 2048 © Gabriele Cirulli, MIT — [gabrielecirulli/2048](https://github.com/gabrielecirulli/2048) (copy in `games/2048/`)
+- Hextris © Logan Engstrom et al., GPL-3.0 — [Hextris/hextris](https://github.com/Hextris/hextris) (copy in `games/hextris/`, ad script removed)
+- PolyTrack © Kodub · A Dark Room (MPL-2.0) © Doublespeak Games · Little Alchemy 2 © Recloak — linked/embedded from their official sites
 - Slow Roads © anslo — [slowroads.io](https://slowroads.io)
 - Maps: [ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/) by Esri (imagery & elevation © Esri and its data providers, attribution shown in the view); [globe.gl](https://github.com/vasturiano/globe.gl) by Vasco Asturiano (MIT) with NASA Blue Marble textures from three-globe; geocoding fallback © OpenStreetMap contributors (Nominatim)
 - Fonts: Press Start 2P & VT323 (Google Fonts, OFL)

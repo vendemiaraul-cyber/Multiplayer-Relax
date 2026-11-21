@@ -1,5 +1,6 @@
 // Arcade: real, high-quality games that legally run in a browser, embedded from
-// their official hosts — except HexGL (MIT), which is hosted in games/hexgl/.
+// their official hosts, or hosted in hub/public/games/ when the licence allows
+// (HexGL, Javascript Racer, 2048, Hextris). Sites that forbid embedding open in a new tab.
 
 import { el } from "../util.js";
 
@@ -18,16 +19,16 @@ export const GAMES = [
     source: "https://github.com/BKcore/HexGL",
   },
   {
-    id: "polytrack",
+    id: "racer",
     cat: "car",
-    name: "PolyTrack",
-    by: "Kodub",
-    url: "https://www.kodub.com/apps/polytrack",
-    tag: "Low-poly time-trial racer · desktop & mobile",
-    desc: "Loops, jumps and drifts where every millisecond counts. Race the official tracks against ghosts, climb the online leaderboards, or build your own track in the editor.",
-    color: "#ffd166",
-    license: "Free to play (official site)",
-    source: "https://kodub.itch.io/polytrack",
+    name: "Javascript Racer",
+    by: "Jake Gordon",
+    url: "games/racer/index.html",
+    tag: "Retro OutRun-style racer · keyboard or touch pedals",
+    desc: "A pseudo-3D arcade racer straight out of the 80s: hills, curves, traffic and lap times. Arrow keys / WASD, or the on-screen pedals on a phone.",
+    color: "#ff4f9a",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/jakesgordon/javascript-racer",
   },
   {
     id: "slowroads",
@@ -42,27 +43,28 @@ export const GAMES = [
     source: "https://slowroads.io/",
   },
   {
-    id: "bruno",
+    id: "polytrack",
     cat: "car",
-    name: "Bruno's Toy Car",
-    by: "Bruno Simon",
-    url: "https://bruno-simon.com/",
-    tag: "Drive a toy car around a 3D playground",
-    desc: "Bruno Simon's famous interactive portfolio: a little car you drive around a physics playground, knocking over bricks and bowling pins. WASD / arrows, or the on-screen controls on a phone.",
-    color: "#e84a5f",
-    license: "Free (official site)",
-    source: "https://bruno-simon.com/",
+    name: "PolyTrack",
+    by: "Kodub",
+    url: "https://www.kodub.com/apps/polytrack",
+    external: true,
+    tag: "Low-poly time-trial racer · opens on kodub.com",
+    desc: "Loops, jumps and drifts where every millisecond counts, with ghosts, online leaderboards and a track editor. Kodub only allows it on its own site, so it opens in a new tab.",
+    color: "#ffd166",
+    license: "Free to play (official site)",
+    source: "https://kodub.itch.io/polytrack",
   },
   {
     id: "hextris",
     cat: "other",
     name: "Hextris",
     by: "Logan Engstrom, Garrett Finucane, Noah Moroze, Michael Yang",
-    url: "https://hextris.github.io/hextris/",
+    url: "games/hextris/index.html",
     tag: "Fast puzzle, inspired by Tetris",
     desc: "Rotate the hexagon so falling blocks land on matching colours before they stack too high. Left/right or tap the sides of the screen.",
     color: "#8e7cc3",
-    license: "Open source (GPL-3.0), ad-free official version",
+    license: "Open source (GPL-3.0) — hosted inside Relax Hub, ad-free",
     source: "https://github.com/Hextris/hextris",
   },
   {
@@ -70,11 +72,11 @@ export const GAMES = [
     cat: "other",
     name: "2048",
     by: "Gabriele Cirulli",
-    url: "https://play2048.co/",
+    url: "games/2048/index.html",
     tag: "Slide-and-merge number puzzle",
     desc: "Slide tiles to merge equal numbers and reach the 2048 tile. Arrow keys or swipe.",
     color: "#edc22e",
-    license: "Free (official site)",
+    license: "Open source (MIT) — hosted inside Relax Hub",
     source: "https://github.com/gabrielecirulli/2048",
   },
   {
@@ -127,8 +129,10 @@ export function createArcade() {
         el("p", { text: gm.desc }),
         el("div", { class: "arc-meta muted", text: `by ${gm.by} · ${gm.license}` }),
         el("div", { class: "arc-actions" },
-          el("button", { type: "button", class: "btn primary", text: "▶ Play here", onclick: () => play(gm) }),
-          el("a", { class: "btn", href: gm.url, target: "_blank", rel: "noopener", text: "Full screen ↗" }),
+          gm.external
+            ? el("a", { class: "btn primary", href: gm.url, target: "_blank", rel: "noopener", text: "▶ Open ↗" })
+            : el("button", { type: "button", class: "btn primary", text: "▶ Play here", onclick: () => play(gm) }),
+          gm.external ? null : el("a", { class: "btn", href: gm.url, target: "_blank", rel: "noopener", text: "Full screen ↗" }),
           el("a", { class: "btn small", href: gm.source, target: "_blank", rel: "noopener", text: "About" }),
         ),
       ),
