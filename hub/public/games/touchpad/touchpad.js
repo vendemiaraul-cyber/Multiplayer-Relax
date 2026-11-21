@@ -10,9 +10,11 @@
  *           data-right="ArrowDown:▼ ArrowUp:▲"        bottom-right cluster
  *           data-top="KeyE:Auto KeyV:Cam"              optional small row, top-right
  *           data-bottom="110px"                         optional lift above the game's HUD
- *           data-toggle="right"></script>               ⌨ hide button corner (default left)
+ *           data-toggle="right"></script>               ⌨ hide button: left (default), right or center
  *
- * Buttons are "Code:Label" pairs separated by spaces. Several fingers work at once; sliding a
+ * Buttons are "Code:Label" pairs separated by spaces; " | " starts a new row above, e.g.
+ * data-right="KeyE:Item Space:Drift | ArrowDown:▼ ArrowUp:▲" gives a 2×2 block (first row on top).
+ * Several fingers work at once; sliding a
  * finger from one button to the next switches keys, like a real pad.
  * Shown only on touch screens; ?touch=1 forces it on, ?touch=0 off. The ⌨ button hides it.
  */
@@ -60,10 +62,11 @@
   function releaseAll() { for (const code of [...held.keys()]) { held.set(code, 1); release(code); } }
 
   function parse(spec) {
-    return String(spec || "").trim().split(/\s+/).filter(Boolean).map((pair) => {
+    // → array of rows, each an array of { code, label }
+    return String(spec || "").split("|").map((row) => row.trim().split(/\s+/).filter(Boolean).map((pair) => {
       const i = pair.indexOf(":");
       return i < 0 ? { code: pair, label: pair.replace(/^(Key|Digit|Arrow)/, "") } : { code: pair.slice(0, i), label: pair.slice(i + 1) };
-    });
+    })).filter((row) => row.length);
   }
   const d = script ? script.dataset : {};
   const layout = {
@@ -72,19 +75,22 @@
     top: parse(d.top),
   };
   const lift = d.bottom || "18px";
-  const side = d.toggle === "right" ? "right" : "left";
+  const side = ["right", "center"].includes(d.toggle) ? d.toggle : "left";
+  const togglePos = side === "center" ? "left:50%;transform:translateX(-50%)" : `${side}:calc(10px + env(safe-area-inset-${side},0px))`;
 
   const css = `
   .rtp{position:fixed;inset:0;pointer-events:none;z-index:2147483000;font:600 18px/1 system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-  .rtp-c{position:absolute;bottom:calc(${lift} + env(safe-area-inset-bottom,0px));display:flex;gap:12px;pointer-events:none}
+  .rtp-c{position:absolute;bottom:calc(${lift} + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
+  .rtp-row{display:flex;gap:12px;justify-content:flex-end}.rtp-l .rtp-row{justify-content:flex-start}
   .rtp-l{left:calc(14px + env(safe-area-inset-left,0px))}.rtp-r{right:calc(14px + env(safe-area-inset-right,0px))}
   .rtp-t{top:calc(10px + env(safe-area-inset-top,0px));right:calc(56px + env(safe-area-inset-right,0px));bottom:auto;gap:8px}
   .rtp b{pointer-events:auto;touch-action:none;display:grid;place-items:center;width:68px;height:68px;border-radius:50%;
     background:rgba(20,20,30,.38);color:#fff;border:2px solid rgba(255,255,255,.45);box-shadow:0 2px 10px rgba(0,0,0,.25);
     -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);transition:transform .06s,background .06s}
   .rtp-t b{width:auto;min-width:44px;height:36px;padding:0 12px;border-radius:18px;font-size:13px}
+  .rtp b.sm{font-size:13px}
   .rtp b.on{background:rgba(255,255,255,.42);transform:scale(.93)}
-  .rtp-x{pointer-events:auto;position:absolute;top:calc(10px + env(safe-area-inset-top,0px));${side}:calc(10px + env(safe-area-inset-${side},0px));
+  .rtp-x{pointer-events:auto;position:absolute;top:calc(10px + env(safe-area-inset-top,0px));${togglePos};
     width:38px;height:38px;border-radius:50%;border:0;background:rgba(20,20,30,.45);color:#fff;font-size:18px}
   .rtp.off .rtp-c{display:none}
   @media (max-height:420px){.rtp b{width:58px;height:58px}}`;
@@ -97,16 +103,22 @@
     root.className = "rtp";
     root.setAttribute("aria-hidden", "true");
     const byCode = new Map();
-    for (const [name, buttons] of Object.entries(layout)) {
-      if (!buttons.length) continue;
+    for (const [name, rows] of Object.entries(layout)) {
+      if (!rows.length) continue;
       const box = document.createElement("div");
       box.className = `rtp-c rtp-${name[0]}`;
-      for (const b of buttons) {
-        const el = document.createElement("b");
-        el.textContent = b.label;
-        el.dataset.code = b.code;
-        box.appendChild(el);
-        byCode.set(el, b.code);
+      for (const buttons of rows) {
+        const row = document.createElement("div");
+        row.className = "rtp-row";
+        for (const b of buttons) {
+          const el = document.createElement("b");
+          el.textContent = b.label;
+          el.dataset.code = b.code;
+          if ([...b.label].length > 2) el.className = "sm";
+          row.appendChild(el);
+          byCode.set(el, b.code);
+        }
+        box.appendChild(row);
       }
       root.appendChild(box);
     }

@@ -27,24 +27,26 @@
     <meta name="application-name" content="Bruno Simon">
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=block" rel="stylesheet">
+
+
+    <style>@font-face{font-family:"Comic Neue";font-weight:700;font-display:block;src:url("vendor/fonts/ComicNeue-Bold.ttf") format("truetype")}</style>
     <link rel="stylesheet" href="style/main.css">
+    <script src="vendor/cannon/cannon.min.js"></script>
+    <script src="vendor/howler/howler.min.js"></script>
     <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/",
-        "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js",
-        "dat.gui": "https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.module.js",
-        "cannon": "https://esm.sh/cannon@0.6.2",
-        "howler": "https://esm.sh/howler@2.2.4"
+        "three": "./vendor/three/build/three.module.min.js",
+        "three/examples/jsm/": "./vendor/three/examples/jsm/",
+        "three/addons/": "./vendor/three/examples/jsm/",
+        "gsap": "./vendor/gsap/index.js",
+        "dat.gui": "./vendor/dat.gui/dat.gui.module.js",
+        "cannon": "./vendor/cannon/index.js",
+        "howler": "./vendor/howler/index.js"
       }
     }
     </script>
+    <link rel="modulepreload" href="./vendor/three/build/three.module.min.js">
     <script type="module" src="index.js"></script>
 </head>
 <body>

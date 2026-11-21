@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turbo Kart Rally</title>
+
+  <style>@font-face{font-family:"Lilita One";font-style:normal;font-weight:400;font-display:swap;src:url("vendor/fonts/LilitaOne-Regular.ttf") format("truetype")}@font-face{font-family:"Nunito";font-style:normal;font-weight:200 1000;font-display:swap;src:url("vendor/fonts/Nunito%5Bwght%5D.ttf") format("truetype")}</style>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏁</text></svg>" />
+  <link rel="stylesheet" href="src/styles.css" />
+  <script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.min.js",
+    "three/addons/": "./vendor/three/examples/jsm/",
+    "three/examples/jsm/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="game-root">
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-root"></div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+  <!-- Relax Hub: touch buttons on phones (press the same keys as the keyboard) -->
+  <script src="../touchpad/touchpad.js" data-left="Escape:❚❚ | ArrowLeft:◀ ArrowRight:▶" data-right="KeyE:Item Space:Drift | ArrowDown:▼ ArrowUp:▲" data-bottom="150px" data-toggle="right"></script>
+</body>
+</html>

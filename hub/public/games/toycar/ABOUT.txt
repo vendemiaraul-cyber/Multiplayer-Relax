@@ -1,2 +1,4 @@
 Bruno Simon's folio-2019 (MIT) — https://github.com/brunosimon/folio-2019
-Converted to plain ES modules by scripts/vendor-toycar.mjs (no bundler). Libraries load from jsDelivr/esm.sh.
+Converted to plain ES modules by scripts/vendor-toycar.mjs (no bundler).
+Libraries are copied into vendor/ with their licences: three.js r164 (MIT), GSAP 3.12.5 (GreenSock standard licence),
+cannon.js 0.6.2 (MIT), howler.js 2.2.4 (MIT), dat.gui 0.7.9 (Apache-2.0).

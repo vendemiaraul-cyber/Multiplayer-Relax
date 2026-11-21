@@ -1,0 +1,46 @@
+{
+  "_from": "@ruffle-rs/ruffle",
+  "_id": "@ruffle-rs/ruffle@0.1.0-nightly.2023.12.21",
+  "_inBundle": false,
+  "_integrity": "sha512-gSgNqEcpNvv6aKXNhuVgizdLz2+Pwk+f+drYpX0IcCLzo4pMt9gshAgpgWmYEtY+AH9luD4hHIbjFbsndf4Hcg==",
+  "_location": "/@ruffle-rs/ruffle",
+  "_phantomChildren": {},
+  "_requested": {
+    "type": "tag",
+    "registry": true,
+    "raw": "@ruffle-rs/ruffle",
+    "name": "@ruffle-rs/ruffle",
+    "escapedName": "@ruffle-rs%2fruffle",
+    "scope": "@ruffle-rs",
+    "rawSpec": "",
+    "saveSpec": null,
+    "fetchSpec": "latest"
+  },
+  "_requiredBy": [
+    "#USER",
+    "/"
+  ],
+  "_resolved": "https://registry.npmjs.org/@ruffle-rs/ruffle/-/ruffle-0.1.0-nightly.2023.12.21.tgz",
+  "_shasum": "259a8e39be5ae5dedc2272d01ee760d87ae2d646",
+  "_spec": "@ruffle-rs/ruffle",
+  "_where": "/mnt/archive/projects/molleindustria-arcade",
+  "bugs": {
+    "url": "https://github.com/ruffle-rs/ruffle/issues"
+  },
+  "bundleDependencies": false,
+  "deprecated": false,
+  "description": "Putting Flash back on the web. Ruffle will polyfill all Flash content and replace it with the Ruffle flash player.",
+  "homepage": "https://ruffle.rs",
+  "keywords": [
+    "flash",
+    "swf"
+  ],
+  "license": "(MIT OR Apache-2.0)",
+  "main": "ruffle.js",
+  "name": "@ruffle-rs/ruffle",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruffle-rs/ruffle.git"
+  },
+  "version": "0.1.0-nightly.2023.12.21"
+}

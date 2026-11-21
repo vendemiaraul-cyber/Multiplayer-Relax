@@ -1,0 +1,10 @@
+The Free Culture Game — a playable theory
+by Molleindustria (with Exgae and Conservas), 2008
+https://www.molleindustria.org/freeculturegame-eng
+
+Released by its authors under a Creative Commons Attribution-NonCommercial-ShareAlike licence
+(CC BY-NC-SA): https://creativecommons.org/licenses/by-nc-sa/3.0/
+
+Relax Hub shares the original, unmodified Flash file (freeculturegame-eng.swf) for free, with no ads
+and no money made from it, crediting Molleindustria. It plays through Ruffle (../ruffle/,
+MIT / Apache-2.0, https://ruffle.rs).

@@ -1,6 +1,7 @@
 // Arcade: real, high-quality games that legally run in a browser, embedded from
 // their official hosts, or hosted in hub/public/games/ when the licence allows
-// (HexGL, Javascript Racer, Beach Road, Toy Car, 2048, Hextris). Sites that forbid embedding open in a new tab.
+// (HexGL, Javascript Racer, the Turbo Karts, Beach Road, Toy Car, 2048, Hextris, The Free Culture Game).
+// Sites that forbid embedding open in a new tab.
 
 import { el } from "../util.js";
 
@@ -29,6 +30,30 @@ export const GAMES = [
     color: "#ff4f9a",
     license: "Open source (MIT) — hosted inside Relax Hub",
     source: "https://github.com/jakesgordon/javascript-racer",
+  },
+  {
+    id: "kartrush",
+    cat: "car",
+    name: "Turbo Kart Rush",
+    by: "bridge-mind",
+    url: "games/kartrush/index.html",
+    tag: "Kart racing · 4 circuits, 8 racers, items · keyboard, gamepad or touch",
+    desc: "Race seven AI drivers over three laps on four circuits, from Sunny Circuit to Neon Nexus. Drift through corners for a mini-turbo and grab item boxes. Every model, texture and tune is generated in code.",
+    color: "#ff5ca8",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/bridge-mind/turbo-kart-rush",
+  },
+  {
+    id: "kartrally",
+    cat: "car",
+    name: "Turbo Kart Rally",
+    by: "bridge-mind",
+    url: "games/kartrally/index.html",
+    tag: "Kart racing on Palm Cove Circuit · keyboard, gamepad or touch",
+    desc: "Pick one of eight racers and a class (50cc to 150cc), then race around a 2 km circuit with boost pads, jump ramps and a bridge over a lagoon. Drift, then release for a mini-turbo.",
+    color: "#ffb020",
+    license: "Open source (MIT) — hosted inside Relax Hub",
+    source: "https://github.com/bridge-mind/turbo-kart-rally",
   },
   {
     id: "slowroads",
@@ -85,7 +110,7 @@ export const GAMES = [
     by: "Bruno Simon",
     url: "games/toycar/index.html",
     tag: "Drive a little car around a 3D playground · keyboard or touch",
-    desc: "Bruno Simon's famous 2019 portfolio: knock over bricks and bowling pins, hit jumps and explore the island. Arrow keys / WASD, Shift to boost, or the on-screen pad on a phone.",
+    desc: "Bruno Simon's famous 2019 portfolio: knock over bricks and bowling pins, hit jumps and explore the island. Arrow keys / WASD, Shift to boost, or the on-screen pad on a phone. Everything loads from Relax Hub itself and the picture quality adapts to keep it smooth.",
     color: "#ff8908",
     license: "Open source (MIT) — hosted inside Relax Hub",
     source: "https://github.com/brunosimon/folio-2019",
@@ -126,6 +151,18 @@ export const GAMES = [
     color: "#edc22e",
     license: "Open source (MIT) — hosted inside Relax Hub",
     source: "https://github.com/gabrielecirulli/2048",
+  },
+  {
+    id: "freeculture",
+    cat: "other",
+    name: "The Free Culture Game",
+    by: "Molleindustria",
+    url: "games/freeculture/index.html",
+    tag: "Playable theory about sharing ideas · mouse or touch",
+    desc: "Grow and defend the commons, where ideas are created and shared, and free the passive consumers from the Market. The game never really ends: you can only do better or worse. The original 2008 Flash game, played through Ruffle.",
+    color: "#f5c400",
+    license: "CC BY-NC-SA — hosted inside Relax Hub, non-commercial",
+    source: "https://www.molleindustria.org/freeculturegame-eng",
   },
   {
     id: "adarkroom",

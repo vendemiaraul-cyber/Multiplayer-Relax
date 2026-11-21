@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Free Culture Game — Molleindustria</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+    #stage ruffle-player, #stage ruffle-object { width: 100%; height: 100%; display: block; }
+    #credit { position: fixed; left: 8px; top: 6px; font: 11px/1.3 system-ui, sans-serif; color: rgba(255,255,255,.55); pointer-events: auto; }
+    #credit a { color: inherit; }
+  </style>
+  <script>
+    // Ruffle (MIT / Apache-2.0) plays the original Flash file, hosted here with the game.
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      autoplay: "on",
+      unmuteOverlay: "hidden",
+      splashScreen: false,
+      letterbox: "on",
+      backgroundColor: "#000000",
+      openUrlMode: "confirm",
+      warnOnUnsupportedContent: false,
+      showSwfDownload: false,
+    };
+  </script>
+  <script src="../ruffle/ruffle.js"></script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="credit">
+    <a href="https://www.molleindustria.org/freeculturegame-eng" target="_blank" rel="noopener">The Free Culture Game</a>
+    by Molleindustria ·
+    <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>
+  </div>
+  <script>
+    const player = window.RufflePlayer.newest().createPlayer();
+    document.getElementById("stage").appendChild(player);
+    player.load({ url: "freeculturegame-eng.swf", allowScriptAccess: false }).catch((e) => {
+      document.getElementById("stage").textContent = "Couldn't start the Flash player: " + e;
+      document.getElementById("stage").style.cssText += ";color:#fff;font:16px system-ui;padding:20px";
+    });
+  </script>
+</body>
+</html>
